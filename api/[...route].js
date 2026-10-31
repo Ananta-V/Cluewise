@@ -304,7 +304,23 @@ async function route(req, res) {
   await ensureSchema();
 
   // Health / configuration check.
-  if (path === "health" && method === "GET") return send(res, 200, { ok: true, app: "Cluewise", database: "connected" });
+  if (path === "health" && method === "GET") {
+    const rawUrl = process.env.TURSO_DATABASE_URL || "";
+    let safeUrl = rawUrl;
+    try {
+      const u = new URL(rawUrl);
+      safeUrl = `${u.protocol}//${u.host}${u.pathname}`;
+    } catch {}
+    const token = process.env.TURSO_AUTH_TOKEN || "";
+    const tokenPreview = token ? `${token.slice(0, 10)}...${token.slice(-6)}` : "MISSING";
+    return send(res, 200, {
+      ok: true,
+      app: "Cluewise",
+      database: "connected",
+      db_url: safeUrl,
+      token_preview: tokenPreview
+    });
+  }
 
   if (path === "auth/login" && method === "POST") {
     const name = String(body.name || "").trim();
