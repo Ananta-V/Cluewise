@@ -63,6 +63,7 @@ const server = http.createServer(async (req, res) => {
     }
     const ext = path.extname(filePath).toLowerCase();
     res.setHeader("Content-Type", MIME_TYPES[ext] || "application/octet-stream");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     fs.createReadStream(filePath).pipe(res);
   });
 });

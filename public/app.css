@@ -3,96 +3,53 @@
 @media(max-width:1000px){.set-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.app-layout{grid-template-columns:205px minmax(0,1fr)}.sidebar{padding-left:12px;padding-right:12px}.main-content{padding-left:28px;padding-right:28px}.auth-side-note{display:none}}
 @media(max-width:700px){
   /* --- Topbar --- */
-  .topbar{height:58px;padding:0 16px}
-  .brand-symbol{width:32px;height:32px;font-size:20px}
-  .brand-word{font-size:16px}
+  .topbar{height:58px;padding:0 12px}
+  .brand-symbol{width:30px;height:30px;font-size:18px}
+  .brand-word{font-size:15px}
   .brand-word small{display:none}
-  .top-actions{gap:8px}
+  .top-actions{gap:6px}
   .member-chip{display:none}
-  .top-link{font-size:9px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;color:var(--muted)}
+  .top-link{font-size:9px;padding:4px 7px;border:1px solid var(--line);border-radius:6px;color:var(--muted)}
 
-  /* --- Layout: stack sidebar on top of main --- */
-  .app-layout{display:flex;flex-direction:column;min-height:calc(100vh - 100px)}
-
-  /* --- True Mobile Sidebar: Off-canvas sliding drawer from left --- */
-  .top-left{display:flex;align-items:center;gap:10px}
-  .sidebar-toggle-btn{
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    gap:6px;
-    height:36px;
-    padding:0 10px;
-    background:#edf5ef;
-    border:1px solid #d4e4d8;
-    border-radius:8px;
-    color:var(--green);
-    font-size:11px;
-    font-weight:700;
-    cursor:pointer;
-    user-select:none;
-    transition:background .15s,transform .1s;
+  /* --- Layout: persistent side-by-side sidebar + main (same as desktop) --- */
+  .app-layout{
+    display:grid;
+    grid-template-columns:145px minmax(0,1fr);
+    min-height:calc(100vh - 58px);
   }
-  .sidebar-toggle-btn:active{transform:scale(0.96);background:#e2efe5}
-  .sidebar-toggle-btn .toggle-icon{font-size:14px;line-height:1}
-  .sidebar-toggle-btn .toggle-text{font-size:10px;letter-spacing:.5px;text-transform:uppercase}
 
-  .sidebar-backdrop{
-    display:block;
-    position:fixed;
-    inset:0;
-    background:rgba(18,33,26,.45);
-    backdrop-filter:blur(4px);
-    -webkit-backdrop-filter:blur(4px);
-    z-index:99;
-    opacity:0;
-    pointer-events:none;
-    transition:opacity .25s ease;
-  }
-  .sidebar-backdrop.active{opacity:1;pointer-events:auto}
+  /* Hide the toggle button & backdrop — sidebar is always visible */
+  .sidebar-toggle-btn{display:none !important}
+  .sidebar-backdrop{display:none !important}
+  .sidebar-close-btn{display:none !important}
 
+  /* Sidebar: always visible, no off-canvas tricks */
   .sidebar{
-    position:fixed;
-    top:0;
-    left:0;
-    bottom:0;
-    width:min(85vw,320px);
-    height:100vh;
-    background:#ffffff;
-    z-index:100;
-    transform:translateX(-105%);
-    transition:transform .28s cubic-bezier(0.16,1,0.3,1);
-    box-shadow:10px 0 35px rgba(20,45,34,.18);
-    display:flex;
-    flex-direction:column;
-    padding:20px 16px 20px 18px;
+    position:static;
+    width:145px;
+    height:auto;
+    min-height:calc(100vh - 58px);
+    transform:none !important;
+    transition:none;
+    box-shadow:none;
+    background:#fff;
     border-right:1px solid var(--line);
     border-bottom:0;
-    min-height:0;
+    padding:12px 6px 16px;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+    z-index:auto;
   }
-  .sidebar.open{transform:translateX(0)}
   .sidebar-header{
     display:flex;
     align-items:center;
-    justify-content:space-between;
-    padding-bottom:14px;
-    margin-bottom:12px;
+    justify-content:flex-start;
+    padding-bottom:8px;
+    margin-bottom:6px;
     border-bottom:1px solid var(--line);
   }
-  .sidebar-close-btn{
-    display:grid;
-    place-items:center;
-    width:34px;
-    height:34px;
-    border-radius:9px;
-    background:#f2f6f3;
-    border:0;
-    font-size:14px;
-    color:#4b5e53;
-    cursor:pointer;
-  }
-  .sidebar-close-btn:active{background:#e2ece5}
-
+  .sidebar-title{font-size:9px;letter-spacing:1px}
   .sidebar-body{
     display:flex;
     flex-direction:column;
@@ -102,26 +59,39 @@
     padding:0;
     background:transparent;
     border:0;
-    max-height:none;
   }
-  .file-explorer{flex:1;overflow-y:auto;padding-right:2px}
-  .sidebar-bottom{display:block;padding-top:12px;margin-top:auto}
-  .sidebar-bottom .btn{width:100%;height:44px}
+  .file-explorer{flex:1;overflow-y:auto;padding-right:2px;max-height:none}
+  .sidebar-bottom{display:block;padding-top:8px;margin-top:auto}
+  .sidebar-bottom .btn{width:100%;height:36px;font-size:9px;padding:6px 4px}
   .sidebar-tip{display:none}
 
-  /* --- Main content --- */
-  .main-content{padding:22px 15px 50px}
-  .welcome-row{flex-direction:column;align-items:flex-start;gap:14px;margin-bottom:22px}
-  .welcome-row h1{font-size:23px;line-height:1.25;margin-top:6px}
-  .welcome-row .muted{font-size:12px}
-  .welcome-row .btn{width:100%;height:44px}
+  /* Compact explorer nodes for phone sidebar */
+  .tree-root-item{padding:6px 6px;gap:5px;font-size:10px}
+  .tree-root-label{font-size:10px}
+  .tree-root-badge{font-size:8px;padding:1px 4px}
+  .explorer-folder{margin-bottom:3px}
+  .explorer-folder-head{padding:6px 5px;gap:4px;font-size:10px}
+  .folder-icon{font-size:11px}
+  .folder-name{font-size:10px}
+  .folder-badge{font-size:8px;padding:1px 4px}
+  .explorer-step-item{padding:5px 5px;gap:5px}
+  .step-title{font-size:10px}
+  .step-meta{font-size:8px}
+  .step-done-tag{font-size:7px;padding:1px 3px}
 
-  /* Stats */
-  .stats-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:28px}
-  .stat-card{padding:12px 10px;min-height:90px;border-radius:10px}
-  .stat-label{font-size:7px;letter-spacing:.4px}
-  .stat-card strong{font-size:22px;margin:6px 0 1px}
-  .stat-card small{font-size:9px}
+  /* Main content: narrower padding on phone */
+  .main-content{padding:14px 10px 50px}
+  .welcome-row{flex-direction:column;align-items:flex-start;gap:10px;margin-bottom:18px}
+  .welcome-row h1{font-size:20px;line-height:1.25;margin-top:4px}
+  .welcome-row .muted{font-size:11px}
+  .welcome-row .btn{width:100%;height:40px}
+
+  /* Stats: single-column stack on phone for clean fit */
+  .stats-grid{grid-template-columns:1fr;gap:6px;margin-bottom:20px}
+  .stat-card{padding:9px 12px;min-height:auto;border-radius:9px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .stat-label{font-size:8px;letter-spacing:.4px}
+  .stat-card strong{font-size:18px;margin:0}
+  .stat-card small{display:none}
 
   /* Section heading */
   .section-heading{flex-direction:column;align-items:flex-start;gap:10px}
