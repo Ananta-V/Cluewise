@@ -42,7 +42,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Rewrites
-  if (pathname === "/admin") pathname = "/admin.html";
+  if (pathname === "/admin117" || pathname === "/admin117/" || pathname === "/admin" || pathname === "/admin/") pathname = "/admin.html";
   if (pathname === "/" || pathname === "") pathname = "/index.html";
 
   // Static files in public
