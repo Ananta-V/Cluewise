@@ -1333,9 +1333,21 @@ async function importLearningSet() {
     method: "POST",
     body: {
       title: batch_title,
+      batch_title,
+      domain,
       category,
       subcategory,
+      focus_area,
       difficulty,
+      pack_id,
+      batch,
+      total_batches: totalBatches,
+      level_status,
+      curriculum_plan,
+      batch_concepts,
+      concepts_covered,
+      concepts_remaining,
+      supporting_concepts_covered,
       questions: cleanedQuestions
     }
   }).then((res) => {

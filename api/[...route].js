@@ -23,8 +23,8 @@ import { promisify } from "node:util";
 
 const scrypt = promisify(scryptCallback);
 const COOKIE_NAME = "cluewise_session";
-const SESSION_SECONDS = 60 * 60 * 24 * 7;
-const ADMIN_SESSION_SECONDS = 60 * 60 * 8;
+const SESSION_SECONDS = 60 * 60 * 24 * 30; // 30 days persistent login
+const ADMIN_SESSION_SECONDS = 60 * 60 * 24 * 30; // 30 days persistent admin login
 const NAME_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} ._'-]{0,49}$/u;
 
 let dbClient;
@@ -56,14 +56,23 @@ async function ensureSchema() {
         `CREATE TABLE IF NOT EXISTS learning_sets (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           user_id INTEGER NOT NULL,
+          domain TEXT NOT NULL DEFAULT 'Business & Economics',
           title TEXT NOT NULL,
           category TEXT NOT NULL,
           subcategory TEXT NOT NULL DEFAULT '',
+          focus_area TEXT NOT NULL DEFAULT '',
           difficulty TEXT NOT NULL DEFAULT 'beginner',
+          pack_id TEXT NOT NULL DEFAULT '',
+          batch INTEGER NOT NULL DEFAULT 1,
+          total_batches INTEGER NOT NULL DEFAULT 1,
+          level_status TEXT NOT NULL DEFAULT 'in_progress',
+          curriculum_plan_json TEXT NOT NULL DEFAULT '{}',
+          concepts_json TEXT NOT NULL DEFAULT '{}',
           questions_json TEXT NOT NULL,
           attempts_json TEXT NOT NULL DEFAULT '{}',
           status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','archived')),
-          created_at TEXT NOT NULL
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL DEFAULT ''
         )`,
         `CREATE INDEX IF NOT EXISTS idx_learning_sets_user ON learning_sets(user_id, status, id)`,
         `CREATE TABLE IF NOT EXISTS saved_reviews (
@@ -171,6 +180,9 @@ function enforceSameOrigin(req) {
         (hostWithoutPort === "localhost" || hostWithoutPort === "127.0.0.1")) {
       return true;
     }
+    if (originHostname.endsWith(".loca.lt") || originHostname.endsWith(".vercel.app")) {
+      return true;
+    }
     return false;
   } catch { return false; }
 }
@@ -237,16 +249,41 @@ function parseRoute(req) {
   const cleanPath = parsedUrl.pathname.replace(/^\/api\/?/, "").replace(/^\[\.\.\.route\](?:\.js)?\/?/, "");
   return cleanPath.split("/").filter(Boolean).map((part) => decodeURIComponent(part));
 }
-function serializeSet(row, includeContent = false) {
+function serializeSet(row, includeContent = true) {
   const questions = JSON.parse(row.questions_json || "[]");
   const attempts = JSON.parse(row.attempts_json || "{}");
+  const curriculumPlan = row.curriculum_plan_json ? JSON.parse(row.curriculum_plan_json) : null;
+  const conceptsData = row.concepts_json ? JSON.parse(row.concepts_json) : {};
+
   const result = {
-    id: Number(row.id), title: row.title, category: row.category,
-    subcategory: row.subcategory || "", difficulty: row.difficulty || "beginner",
-    total: questions.length, completed: Object.keys(attempts).length,
-    status: row.status, created_at: row.created_at
+    id: Number(row.id),
+    title: row.title,
+    batch_title: row.title,
+    domain: row.domain || "",
+    category: row.category,
+    subcategory: row.subcategory || "",
+    focus_area: row.focus_area || "",
+    difficulty: row.difficulty || "beginner",
+    level: row.difficulty || "beginner",
+    pack_id: row.pack_id || "",
+    batch: Number(row.batch || 1),
+    total_batches: Number(row.total_batches || 1),
+    level_status: row.level_status || "in_progress",
+    curriculum_plan: curriculumPlan,
+    batch_concepts: conceptsData.batch_concepts || [],
+    concepts_covered: conceptsData.concepts_covered || [],
+    concepts_remaining: conceptsData.concepts_remaining || [],
+    supporting_concepts_covered: conceptsData.supporting_concepts_covered || [],
+    total: questions.length,
+    completed: Object.keys(attempts).length,
+    status: row.status,
+    created_at: row.created_at,
+    updated_at: row.updated_at || ""
   };
-  if (includeContent) { result.questions = questions; result.attempts = attempts; }
+  if (includeContent) {
+    result.questions = questions;
+    result.attempts = attempts;
+  }
   return result;
 }
 
@@ -386,13 +423,34 @@ async function route(req, res) {
         });
       }
       const category = String(body.category || "General").trim().slice(0, 100) || "General";
+      const domain = String(body.domain || "").trim().slice(0, 100) || "Business & Economics";
       const subcategory = String(body.subcategory || "").trim().slice(0, 120);
-      const title = String(body.title || subcategory || category).trim().slice(0, 120) || "Untitled set";
-      const difficulty = String(body.difficulty || "beginner").slice(0, 30);
+      const focus_area = String(body.focus_area || "").trim().slice(0, 120);
+      const title = String(body.batch_title || body.title || subcategory || category).trim().slice(0, 120) || "Untitled set";
+      const difficulty = String(body.level || body.difficulty || "beginner").slice(0, 30);
+      const pack_id = String(body.pack_id || "").slice(0, 80);
+      const batch = Number(body.batch || 1);
+      const total_batches = Number(body.total_batches || 1);
+      const level_status = String(body.level_status || "in_progress").slice(0, 30);
+      const curriculum_plan_json = JSON.stringify(body.curriculum_plan || {});
+      const concepts_json = JSON.stringify({
+        batch_concepts: body.batch_concepts || [],
+        concepts_covered: body.concepts_covered || [],
+        concepts_remaining: body.concepts_remaining || [],
+        supporting_concepts_covered: body.supporting_concepts_covered || []
+      });
+
       const result = await db.execute({
-        sql: `INSERT INTO learning_sets(user_id,title,category,subcategory,difficulty,questions_json,attempts_json,status,created_at)
-              VALUES(?,?,?,?,?,?,?,'active',?)`,
-        args: [member.id, title, category, subcategory, difficulty, JSON.stringify(cleaned), "{}", nowIso()]
+        sql: `INSERT INTO learning_sets(
+                user_id, domain, title, category, subcategory, focus_area, difficulty,
+                pack_id, batch, total_batches, level_status,
+                curriculum_plan_json, concepts_json, questions_json, attempts_json, status, created_at, updated_at
+              ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'active',?,?)`,
+        args: [
+          member.id, domain, title, category, subcategory, focus_area, difficulty,
+          pack_id, batch, total_batches, level_status,
+          curriculum_plan_json, concepts_json, JSON.stringify(cleaned), "{}", nowIso(), nowIso()
+        ]
       });
       return send(res, 201, { id: Number(result.lastInsertRowid), title, total: cleaned.length });
     }
