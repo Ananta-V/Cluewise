@@ -1693,6 +1693,7 @@ function setupEventListeners() {
 
   // Logout handler (clears session and returns to login screen)
   const handleLogout = async () => {
+    closeSidebar();
     try {
       await api("/api/auth/logout", { method: "POST", body: {} });
     } catch {}

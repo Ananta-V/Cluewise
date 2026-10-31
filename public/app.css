@@ -804,20 +804,24 @@
     top:0;
     left:0;
     bottom:0;
-    width:285px;
-    max-width:86vw;
+    width:290px;
+    max-width:88vw;
     height:100vh;
+    height:100dvh;
+    max-height:100dvh;
     background:#ffffff;
     z-index:1000;
     box-shadow:none;
     transform:translateX(-105%);
     transition:transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
-    padding:16px 14px 20px;
+    padding:16px 14px 0;
     display:flex;
     flex-direction:column;
-    overflow:hidden;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
     border-right:1px solid var(--line);
     border-bottom:0;
+    box-sizing:border-box;
   }
   .sidebar.open{
     transform:translateX(0);
@@ -867,16 +871,56 @@
 
   .sidebar-footer{
     margin-top:auto;
-    padding-top:12px;
+    padding-top:14px;
+    /* Generous bottom padding so the Log Out button sits safely above the phone's 3 navigation buttons */
+    padding-bottom:max(80px, calc(env(safe-area-inset-bottom, 0px) + 70px));
     border-top:1px solid var(--line);
     display:flex;
     flex-direction:column;
-    gap:8px;
+    gap:10px;
+    flex-shrink:0;
+    background:#ffffff;
   }
   .sidebar-footer .btn{
     width:100%;
-    height:42px;
-    font-size:11px;
+    height:44px;
+    font-size:12px;
+    font-weight:700;
+  }
+  .sidebar-user-card{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:10px 12px;
+    background:#f4f8f5;
+    border:1px solid #dce8df;
+    border-radius:10px;
+  }
+  .sidebar-user-name{
+    font-size:13px;
+    font-weight:700;
+    color:#253c30;
+  }
+  .sidebar-logout-btn{
+    padding:8px 14px;
+    font-size:12px;
+    font-weight:700;
+    background:#ffffff;
+    border:1px solid #ccd8cf;
+    color:#365342;
+    border-radius:8px;
+    cursor:pointer;
+    min-height:38px;
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    box-shadow:0 1px 3px rgba(20,40,30,0.06);
+  }
+  .sidebar-logout-btn:active{
+    background:#fff2f0;
+    color:#b64d48;
+    border-color:#f1cfcc;
   }
   .sidebar-bottom{display:none}
   .sidebar-tip{display:none}
@@ -990,7 +1034,6 @@
   .stack-form input{font-size:15px;height:48px}
   .stack-form .btn{height:48px;font-size:13px}
   .auth-side-note{display:none}
-  #topLogoutButton { padding: 6px 9px; font-size: 11px; }
   #topAddSetBtn { padding: 6px 9px; font-size: 11px; }
   /* Additional prompt builder mobile rules */
   .section-tag-row { flex-direction: column; align-items: flex-start; gap: 6px; }
