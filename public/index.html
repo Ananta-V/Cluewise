@@ -1,0 +1,312 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f7f8f6">
+  <meta name="description" content="Cluewise — Business & Economics Crossword Vocabulary Learning Companion.">
+  <title>Cluewise — Business Crossword Learning Companion</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <!-- Optional member authentication screen (bypassed in standalone/local mode) -->
+  <div class="auth-screen hidden" id="authScreen">
+    <section class="auth-card">
+      <a class="brand" href="/"><span class="brand-symbol">c.</span><span class="brand-word">cluewise<small>CROSSWORD COMPANION</small></span></a>
+      <div class="eyebrow">YOUR PERSONAL LEARNING SPACE</div>
+      <h1>Welcome back.</h1>
+      <p class="auth-intro">Sign in with the member name and password provided by your administrator.</p>
+      <form id="loginForm" class="stack-form">
+        <label for="memberName">Member name</label><input id="memberName" name="name" autocomplete="username" maxlength="50" placeholder="Your name" required>
+        <label for="memberPassword">Password</label><input id="memberPassword" name="password" type="password" autocomplete="current-password" placeholder="Your password" required>
+        <p class="form-message" id="loginMessage" role="alert"></p>
+        <button class="btn btn-primary btn-wide" id="loginButton">Sign in <span>→</span></button>
+      </form>
+      <div class="auth-foot">
+        <button class="btn-text-link" id="continueLocalBtn">Continue as Local Learner (Offline) →</button>
+        <div>Accounts are managed by your Cluewise administrator. <a href="/admin">Administrator access</a></div>
+      </div>
+    </section>
+    <div class="auth-side-note">
+      <span class="note-mark">“</span>
+      <p>Curiosity is a better memory tool than memorisation.</p>
+      <small>CLUEWISE LEARNING STUDIO</small>
+    </div>
+  </div>
+
+  <!-- Main Standalone Application Shell -->
+  <div class="app" id="appShell">
+    <header class="topbar">
+      <div class="top-left">
+        <button class="sidebar-toggle-btn" id="sidebarToggleBtn" aria-label="Open Sidebar" title="Open Explorer">
+          <span class="toggle-icon">☰</span>
+          <span class="toggle-text">Explorer</span>
+        </button>
+        <a class="brand" href="#home">
+          <span class="brand-symbol">c.</span>
+          <span class="brand-word">cluewise<small>CROSSWORD VOCABULARY COMPANION</small></span>
+        </a>
+      </div>
+      <div class="top-actions">
+        <button class="btn btn-quiet btn-small" id="topAddSetBtn">＋ Import JSON</button>
+        <span class="member-chip"><span class="online-dot"></span><span id="loggedInName">Learner</span></span>
+        <a class="top-link" href="/admin" title="Administrator console">Admin</a>
+      </div>
+    </header>
+
+    <!-- Dimmed backdrop for mobile sidebar drawer -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+    <div class="app-layout">
+      <!-- Left Sidebar: Real File Explorer Sidebar -->
+      <aside class="sidebar" id="mainSidebar">
+        <div class="sidebar-header">
+          <span class="sidebar-title"><span class="nav-icon">📁</span> EXPLORER</span>
+          <button class="sidebar-close-btn" id="sidebarCloseBtn" aria-label="Close sidebar">✕</button>
+        </div>
+        <div class="sidebar-body">
+          <!-- File Explorer Tree: pure folder/file navigation -->
+          <div id="fileExplorer" class="file-explorer"></div>
+          <div class="sidebar-bottom">
+            <button class="btn btn-primary btn-wide" id="sidebarAddBtn">＋ Import JSON Pack</button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Learning Content -->
+      <main class="main-content" id="mainContent">
+        <!-- Home / Overview Grid -->
+        <section id="homeView">
+          <div class="welcome-row">
+            <div>
+              <div class="eyebrow" id="dateEyebrow">CROSSWORD VOCABULARY STUDIO</div>
+              <h1 id="welcomeTitle">Learn business terms one clue at a time.</h1>
+              <p class="muted">Explore terminology commonly encountered in business and economics crosswords.</p>
+            </div>
+            <button class="btn btn-primary" id="newSetButton">＋ Add learning set</button>
+          </div>
+
+          <div class="stats-grid">
+            <article class="stat-card">
+              <span class="stat-label">LEARNING STEPS</span>
+              <strong id="statSets">0</strong>
+              <small>In your curriculum</small>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">CLUES EXPLORED</span>
+              <strong id="statExplored">0</strong>
+              <small>Across all steps</small>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">COMPLETED STEPS</span>
+              <strong id="statCompleted">0</strong>
+              <small>Steps mastered</small>
+            </article>
+          </div>
+
+          <div class="section-heading">
+            <div>
+              <div class="eyebrow">CURRICULUM DIRECTORY</div>
+              <h2 id="listHeading">Your learning library</h2>
+            </div>
+            <div class="list-controls">
+              <input id="searchSets" class="search-field" type="search" placeholder="Search categories, topics, terms…" aria-label="Search your library">
+            </div>
+          </div>
+
+          <div class="set-grid" id="setGrid">
+            <div class="empty-state">
+              <span class="empty-illustration">✳</span>
+              <h3>Your library starts here.</h3>
+              <p>Import a GPT-generated JSON pack or explore your starter crossword sets.</p>
+              <button class="btn btn-primary" id="emptyAddButton">Import your first pack</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Learning / Clue Solving View -->
+        <section id="learningView" class="hidden">
+          <button class="back-link" id="backToLibrary">← Back to library</button>
+          <div class="learning-heading">
+            <div>
+              <div class="eyebrow" id="learningCategory">ECONOMICS · ECONOMIC FUNDAMENTALS</div>
+              <h1 id="learningTitle">Basic Economic Concepts</h1>
+              <p class="muted" id="learningSubtitle"></p>
+            </div>
+            <div class="learning-actions">
+              <button class="btn btn-quiet" id="archiveSetButton">Archive</button>
+              <button class="btn btn-danger-quiet" id="deleteSetButton">Delete</button>
+            </div>
+          </div>
+
+          <div class="learning-progress">
+            <div>
+              <span id="questionPosition">CLUE 1 OF 30</span>
+              <span id="progressLabel">0 explored</span>
+            </div>
+            <div class="progress-track"><span id="progressBar"></span></div>
+          </div>
+
+          <article class="question-card" id="questionCard"></article>
+
+          <div class="question-navigation">
+            <button class="btn btn-quiet" id="previousQuestion">← Previous</button>
+            <button class="btn btn-done" id="doneStepButton" disabled title="Finish the last question to mark this step done">Done ✓</button>
+            <span class="question-nav-note">Self-paced learning. Take time to read each clue connection.</span>
+            <button class="btn btn-primary" id="nextQuestion">Next clue →</button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <footer class="app-footer">
+      <span>CLUEWISE · BUSINESS & ECONOMICS CROSSWORD COMPANION</span>
+      <span>Progress is saved locally to your browser profile.</span>
+    </footer>
+  </div>
+
+  <!-- Import Modal with 40-Category Dropdown and Batch Support -->
+  <div class="modal-backdrop hidden" id="importModal" role="dialog" aria-modal="true" aria-labelledby="importTitle">
+    <section class="modal modal-large">
+      <div class="modal-header">
+        <div>
+          <div class="eyebrow">UNIFIED CURRICULUM WORKFLOW</div>
+          <h2 id="importTitle">Generate Prompt &amp; Import Learning Pack</h2>
+          <p class="muted">Section A creates your complete GPT curriculum planning prompt. Section B imports the self-describing JSON pack.</p>
+        </div>
+        <button class="icon-button" id="closeImport" aria-label="Close">✕</button>
+      </div>
+
+      <!-- SECTION A: GENERATE GPT PROMPT -->
+      <div class="unified-section unified-section-a">
+        <div class="section-tag-row">
+          <span class="section-tag">SECTION A · GENERATE GPT PROMPT</span>
+          <small class="section-tag-desc">GPT automatically determines subcategories, concept sequencing &amp; batch divisions.</small>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-full">
+            <label for="setCategorySelect">1. Category <span class="label-req">* Required</span></label>
+            <select id="setCategorySelect" class="category-select">
+              <optgroup label="Domain A — Economics">
+                <option value="Economic Fundamentals" data-topics="Scarcity, resources, needs, wants, utility" selected>1. Economic Fundamentals</option>
+                <option value="Goods &amp; Services" data-topics="Tangible goods, intangible goods, consumer goods, capital goods">2. Goods &amp; Services</option>
+                <option value="Factors of Production" data-topics="Land, labour, capital, entrepreneurship">3. Factors of Production</option>
+                <option value="Demand &amp; Supply" data-topics="Law of demand, law of supply, equilibrium">4. Demand &amp; Supply</option>
+                <option value="Economic Systems" data-topics="Capitalism, socialism, mixed economy, command economy">5. Economic Systems</option>
+                <option value="Market Structures" data-topics="Monopoly, oligopoly, perfect competition">6. Market Structures</option>
+                <option value="Economic Indicators" data-topics="GDP, inflation, deflation, unemployment">7. Economic Indicators</option>
+                <option value="Business Cycles" data-topics="Recession, depression, expansion, recovery">8. Business Cycles</option>
+                <option value="Economic Policies" data-topics="Fiscal policy, monetary policy, taxation">9. Economic Policies</option>
+                <option value="International Economics" data-topics="Imports, exports, tariffs, globalisation">10. International Economics</option>
+              </optgroup>
+              <optgroup label="Domain B — Business Fundamentals">
+                <option value="Business Terminology" data-topics="Assets, liabilities, stakeholders, enterprise">11. Business Terminology</option>
+                <option value="Business Organisation" data-topics="Sole proprietorship, partnership, corporation">12. Business Organisation</option>
+                <option value="Business Functions" data-topics="Production, distribution, administration">13. Business Functions</option>
+                <option value="Business Ownership" data-topics="Private, public, cooperative, franchise">14. Business Ownership</option>
+                <option value="Business Environment" data-topics="Internal, external, micro and macro environments">15. Business Environment</option>
+              </optgroup>
+              <optgroup label="Domain C — Marketing &amp; Commerce">
+                <option value="Marketing Fundamentals" data-topics="Marketing mix, segmentation, positioning">16. Marketing Fundamentals</option>
+                <option value="Pricing Terminology" data-topics="Skimming, penetration, bundling, discounts">17. Pricing Terminology</option>
+                <option value="Branding &amp; Advertising" data-topics="Brand identity, promotion, campaigns">18. Branding &amp; Advertising</option>
+                <option value="Consumer Behaviour" data-topics="Consumer, buyer, customer, utility">19. Consumer Behaviour</option>
+                <option value="Retail &amp; Distribution" data-topics="Wholesaler, retailer, distributor, intermediary">20. Retail &amp; Distribution</option>
+                <option value="Sales Terminology" data-topics="Prospecting, conversion, upselling, negotiation">21. Sales Terminology</option>
+              </optgroup>
+              <optgroup label="Domain D — Entrepreneurship &amp; Startups">
+                <option value="Entrepreneurship" data-topics="Entrepreneur, intrapreneur, innovation">22. Entrepreneurship</option>
+                <option value="Startup Terminology" data-topics="MVP, prototype, validation, scalability">23. Startup Terminology</option>
+                <option value="Business Models" data-topics="B2B, B2C, subscription, marketplace">24. Business Models</option>
+                <option value="Startup Funding" data-topics="Angel investor, venture capital, equity">25. Startup Funding</option>
+                <option value="Business Strategy" data-topics="SWOT, competitive advantage, diversification">26. Business Strategy</option>
+                <option value="Innovation" data-topics="Design thinking, disruption, ideation">27. Innovation</option>
+              </optgroup>
+              <optgroup label="Domain E — Business Management">
+                <option value="Management Fundamentals" data-topics="Planning, organising, directing, controlling">28. Management Fundamentals</option>
+                <option value="Human Resources" data-topics="Recruitment, retention, compensation">29. Human Resources</option>
+                <option value="Leadership" data-topics="Delegation, motivation, organisational culture">30. Leadership</option>
+                <option value="Operations" data-topics="Inventory, procurement, logistics">31. Operations</option>
+                <option value="Finance Terminology" data-topics="Revenue, profit, cash flow, working capital">32. Finance Terminology</option>
+                <option value="Accounting Concepts" data-topics="Balance sheet, assets, depreciation">33. Accounting Concepts</option>
+                <option value="Business Communication" data-topics="Negotiation, persuasion, stakeholder communication">34. Business Communication</option>
+              </optgroup>
+              <optgroup label="Domain F — Indian Business &amp; NEC">
+                <option value="Indian Economy" data-topics="RBI, GDP, inflation, monetary policy">35. Indian Economy</option>
+                <option value="Indian Business Ecosystem" data-topics="MSME, Startup India, DPIIT">36. Indian Business Ecosystem</option>
+                <option value="Government Schemes" data-topics="MUDRA, Stand-Up India, PMEGP">37. Government Schemes</option>
+                <option value="Entrepreneurship Competitions" data-topics="NEC, pitching, business plans, innovation challenges">38. Entrepreneurship Competitions</option>
+                <option value="Social Entrepreneurship" data-topics="Social impact, sustainability, inclusive business">39. Social Entrepreneurship</option>
+                <option value="Business Ethics &amp; Law" data-topics="CSR, intellectual property, compliance">40. Business Ethics &amp; Law</option>
+              </optgroup>
+              <optgroup label="Other">
+                <option value="Custom">Custom / Other Category...</option>
+              </optgroup>
+            </select>
+          </div>
+
+          <div>
+            <label for="setDifficulty">2. Learning Level <span class="label-req">* Required</span></label>
+            <select id="setDifficulty">
+              <option value="beginner" selected>1. Beginner — Definitions, fundamental concepts &amp; basic clues</option>
+              <option value="intermediate">2. Intermediate — Relationships, distinctions &amp; practical context</option>
+              <option value="advanced">3. Advanced — Complex terminology, indirect definitions &amp; subtleties</option>
+              <option value="mastery">4. Mastery — Challenging crossword clues, mixed-concept recognition</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="setFocusArea">3. Focus Area <span class="label-hint">Optional</span></label>
+            <input id="setFocusArea" placeholder="Leave blank to let GPT plan the complete selected category, or specify a particular topic.">
+          </div>
+        </div>
+
+        <div class="prompt-builder">
+          <div class="prompt-builder-head">
+            <div>
+              <b>Curriculum &amp; Batch Planning Prompt</b>
+              <small>Instructs GPT to plan the full curriculum, structure batches, and generate 30 questions.</small>
+            </div>
+            <div class="prompt-builder-btns">
+              <button class="btn btn-quiet btn-small" id="buildPromptButton">Refresh prompt</button>
+              <button class="btn btn-primary btn-small" id="copyPromptButton">📋 Copy prompt</button>
+            </div>
+          </div>
+          <div class="prompt-code-wrap">
+            <div class="code-topline">
+              <span><i></i><i></i><i></i> GENERATED GPT PROMPT (30 QUESTIONS PER BATCH)</span>
+            </div>
+            <pre id="promptOutput" class="prompt-code"></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION SEPARATOR -->
+      <div class="unified-divider">
+        <span>OR PASTE COMPLETED JSON BELOW</span>
+      </div>
+
+      <!-- SECTION B: IMPORT JSON -->
+      <div class="unified-section unified-section-b">
+        <div class="section-tag-row">
+          <span class="section-tag">SECTION B · IMPORT JSON</span>
+          <small class="section-tag-desc">No manual metadata needed. Cluewise reads and organizes everything from the self-describing JSON.</small>
+        </div>
+
+        <label for="jsonInput">Self-Describing JSON Learning Pack <span class="label-hint">Fenced ```json blocks accepted directly.</span></label>
+        <textarea id="jsonInput" class="json-input" rows="8" placeholder="Paste the complete self-describing JSON block generated by GPT here…"></textarea>
+        <p class="form-message" id="importMessage" role="alert"></p>
+
+        <div class="modal-actions">
+          <button class="btn btn-quiet" id="cancelImport">Cancel</button>
+          <button class="btn btn-primary" id="importSetButton">Import Learning Pack →</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>

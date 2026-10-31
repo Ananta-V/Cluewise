@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/admin", "destination": "/admin.html" },
+    { "source": "/api/(.*)", "destination": "/api/[...route].js?route=$1" }
+  ],
+  "functions": {
+    "api/[...route].js": { "maxDuration": 15 },
+    "api/index.js": { "maxDuration": 15 }
+  },
+  "env": {
+    "TURSO_DATABASE_URL": "libsql://krishna-krishna1172.aws-ap-south-1.turso.io",
+    "TURSO_AUTH_TOKEN": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTMzNjkxNDQsImlkIjoiMDFhMThkMWYtNWEwMS03NmJkLThjY2MtM2UxMTk3NTkwN2IyIiwia2lkIjoiZllQOFV2c21nOE92N1M4ZHF1anlHeUY0MHdERmY4b0lZbGtoR19oMHc0WSIsInJpZCI6ImMxNzEyZTNlLTBiNjUtNDk5YS05OGNkLTg2Y2QzOGMyNzgyNSJ9.V7iepZxD5IReA4_hPCBkbU0iSMk0D7E9fOFozpmHUANCIWcpl1Q0AAUOQUfHgnHYoqif8qqlT571y6KixdI5Dw",
+    "SESSION_SECRET": "Qnf7HXQV9e9FH2ibYu2t1TWj6ypFwM1ATO0XnL_qUDinzJFpjP_Sjfmya-I0s9Cu",
+    "ADMIN_PASSWORD": "12345"
+  }
+}

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f7f8f6"><title>Cluewise — Admin</title><link rel="stylesheet" href="/app.css"></head>
+<body class="admin-body">
+  <main class="admin-wrap">
+    <header class="admin-top"><a class="brand" href="/"><span class="brand-symbol">c.</span><span class="brand-word">cluewise<small>ADMINISTRATION</small></span></a><a href="/" class="admin-back">← Back to learning app</a></header>
+    <section class="admin-intro"><div class="eyebrow">CONTROL CENTRE</div><h1>Member management.</h1><p>Make an account for each learner. They will sign in with the name and password you assign, and their Cluewise data stays private to their profile.</p></section>
+    <section class="admin-card" id="adminLoginPanel">
+      <div class="admin-card-heading"><div><div class="eyebrow">ADMIN ACCESS</div><h2>Sign in to manage members</h2></div><span class="admin-lock">⌑</span></div>
+      <form id="adminLoginForm" class="admin-login-form"><div class="admin-field"><label for="adminPassword">Administrator password</label><input id="adminPassword" type="password" autocomplete="current-password" placeholder="Enter admin password" required></div><button class="btn btn-primary" id="adminLoginButton">Unlock dashboard →</button></form>
+      <p id="adminLoginMessage" class="form-message" role="alert"></p>
+      <p class="admin-security-note">Set <code>ADMIN_PASSWORD</code> in Vercel Environment Variables before public launch. The initial fallback is <b>12345</b>, as requested.</p>
+    </section>
+
+    <section class="admin-card hidden" id="adminDashboard">
+      <div class="admin-card-heading"><div><div class="eyebrow">YOUR ACCOUNT DIRECTORY</div><h2>Members <span class="member-total" id="memberTotal">0</span></h2></div><button class="btn btn-quiet btn-small" id="adminLogout">Sign out ↗</button></div>
+      <form id="addMemberForm" class="add-member-form">
+        <div class="admin-field"><label for="newMemberName">Member name</label><input id="newMemberName" maxlength="50" placeholder="e.g. Sankeerth" required></div>
+        <div class="admin-field"><label for="newMemberPassword">Set a password</label><input id="newMemberPassword" type="password" minlength="6" maxlength="256" placeholder="At least 6 characters" required></div>
+        <button class="btn btn-primary" id="addMemberButton">＋ Add member</button>
+      </form>
+      <p id="addMemberMessage" class="form-message" role="alert"></p>
+      <div class="member-list-heading"><span>MEMBER</span><span>LEARNING SETS</span><span>ACTION</span></div>
+      <div id="memberList" class="member-list"><div class="member-empty"><span>✳</span><b>No members yet</b><small>Add your first member above. The directory starts empty.</small></div></div>
+    </section>
+    <footer class="admin-footer">CLUEWISE · PRIVATE LEARNING PROFILES · MEMBER DATA ISOLATION ENABLED</footer>
+  </main>
+  <div class="toast" id="adminToast" role="status"></div>
+  <script src="/admin.js" defer></script>
+</body></html>
