@@ -1,5 +1,12 @@
 const $ = (selector) => document.querySelector(selector);
 
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[c]);
+}
+const escapeHtml = escapeHTML;
+
 // Strip letter counts from crossword clues, e.g. (8 letters), (5,7), (6), [5 letters]
 function stripLetterCounts(text) {
   if (!text || typeof text !== 'string') return '';
@@ -369,11 +376,7 @@ async function api(url, options = {}) {
   }
 }
 
-function escapeHTML(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-  })[c]);
-}
+
 
 let toastTimer;
 function toast(message) {
@@ -1003,7 +1006,7 @@ function populateCategoryDropdown() {
     });
     html += `<optgroup label="Other"><option value="Custom">Custom / Other Category...</option></optgroup>`;
     select.innerHTML = html;
-    if (prevVal && select.querySelector(`option[value="${CSS.escape(prevVal)}"]`)) {
+    if (prevVal && Array.from(select.options).some(o => o.value === prevVal)) {
       select.value = prevVal;
     }
   }
@@ -1023,7 +1026,7 @@ function populateDifficultyDropdown() {
       html += `<option value="${escapeHtml(lvl.level_code)}">${escapeHtml(lvl.label)}</option>`;
     });
     select.innerHTML = html;
-    if (prevVal && select.querySelector(`option[value="${CSS.escape(prevVal)}"]`)) {
+    if (prevVal && Array.from(select.options).some(o => o.value === prevVal)) {
       select.value = prevVal;
     }
   }
@@ -1585,6 +1588,7 @@ function setupEventListeners() {
   $("#newSetButton")?.addEventListener("click", openImport);
   $("#sidebarAddBtn")?.addEventListener("click", openImport);
   $("#topAddSetBtn")?.addEventListener("click", openImport);
+  $("#emptyAddButton")?.addEventListener("click", openImport);
   $("#closeImport")?.addEventListener("click", closeImport);
   $("#cancelImport")?.addEventListener("click", closeImport);
   $("#importModal")?.addEventListener("click", (e) => {
@@ -1688,7 +1692,7 @@ function setupEventListeners() {
   });
 
   // Logout handler (clears session and returns to login screen)
-  $("#logoutButton")?.addEventListener("click", async () => {
+  const handleLogout = async () => {
     try {
       await api("/api/auth/logout", { method: "POST", body: {} });
     } catch {}
@@ -1698,6 +1702,10 @@ function setupEventListeners() {
     $("#loginForm")?.reset();
     showAuth("You have been signed out.");
     toast("Signed out successfully.");
+  };
+
+  document.querySelectorAll("#logoutButton, #topLogoutButton, .logout-btn, .sidebar-logout-btn").forEach((btn) => {
+    btn.addEventListener("click", handleLogout);
   });
 
   // Dynamic input triggers for prompt builder
@@ -1730,14 +1738,10 @@ async function init() {
   populateDifficultyDropdown();
   updatePromptFromInputs();
 
-  // Restore desktop sidebar collapsed preference if saved
-  if (window.innerWidth > 700) {
-    try {
-      if (localStorage.getItem("cluewise_sidebar_collapsed") === "true") {
-        document.getElementById("appLayout")?.classList.add("sidebar-collapsed");
-      }
-    } catch {}
-  }
+  // Ensure desktop sidebar is open and visible by default
+  const layout = document.getElementById("appLayout") || document.querySelector(".app-layout");
+  if (layout) layout.classList.remove("sidebar-collapsed");
+  try { localStorage.removeItem("cluewise_sidebar_collapsed"); } catch {}
 
   // Verify member session
   try {
