@@ -303,9 +303,14 @@ const state = {
   openFolders: new Set(["Economic Fundamentals", "Business Terminology"])
 };
 
-function loadStoredSets() {
+function getStorageKey(userId = state.user?.id) {
+  return userId ? `cluewise_sets_user_${userId}` : STORAGE_KEY;
+}
+
+function loadStoredSets(userId = state.user?.id) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const key = getStorageKey(userId);
+    const raw = localStorage.getItem(key);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -313,14 +318,16 @@ function loadStoredSets() {
   } catch (e) {
     console.warn("Could not read local storage:", e);
   }
-  // Fallback to starter seed packs
-  saveStoredSets(STARTER_SEED_SETS);
-  return STARTER_SEED_SETS;
+  // Fallback to starter seed packs for new or guest accounts
+  const initial = STARTER_SEED_SETS.map((s) => ({ ...s, attempts: {} }));
+  saveStoredSets(initial, userId);
+  return initial;
 }
 
-function saveStoredSets(sets) {
+function saveStoredSets(sets, userId = state.user?.id) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sets));
+    const key = getStorageKey(userId);
+    localStorage.setItem(key, JSON.stringify(sets || []));
   } catch (e) {
     console.error("Could not write local storage:", e);
   }
@@ -1364,6 +1371,41 @@ async function copyText(text, successMessage = "Copied to clipboard.") {
 // =========================================================
 // 9. EVENT LISTENERS & INITIALIZATION
 // =========================================================
+
+function setAuthMessage(msg = "") {
+  const el = $("#loginMessage");
+  if (el) el.textContent = msg;
+}
+
+function showAuth(message = "") {
+  $("#appShell").classList.add("hidden");
+  $("#authScreen").classList.remove("hidden");
+  setAuthMessage(message);
+}
+
+async function showApp(user) {
+  state.user = user;
+  $("#loggedInName").textContent = user.name || "Member";
+  $("#authScreen").classList.add("hidden");
+  $("#appShell").classList.remove("hidden");
+
+  // Load sets isolated for this specific member
+  try {
+    const serverSets = await api("/api/sets");
+    if (Array.isArray(serverSets) && serverSets.length > 0) {
+      state.sets = serverSets;
+      saveStoredSets(state.sets, user.id);
+    } else {
+      state.sets = loadStoredSets(user.id);
+    }
+  } catch (err) {
+    state.sets = loadStoredSets(user.id);
+  }
+
+  renderFileExplorer();
+  renderHome();
+}
+
 function setupEventListeners() {
   // Navigation — handled by file tree Library root node in renderFileExplorer()
 
@@ -1443,11 +1485,11 @@ function setupEventListeners() {
 
   // Continue Local / Offline
   $("#continueLocalBtn")?.addEventListener("click", () => {
-    $("#authScreen").classList.add("hidden");
-    $("#appShell").classList.remove("hidden");
+    showApp({ id: 0, name: "Guest Learner" });
+    toast("Continuing as guest learner (local browser storage).");
   });
 
-  // Login form handler (for optional member mode)
+  // Login form handler (Member profile sign-in)
   $("#loginForm")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const btn = $("#loginButton");
@@ -1462,17 +1504,28 @@ function setupEventListeners() {
           password: $("#memberPassword").value
         }
       });
-      state.user = res.user;
-      $("#loggedInName").textContent = res.user.name;
-      $("#authScreen").classList.add("hidden");
-      $("#appShell").classList.remove("hidden");
+      $("#memberPassword").value = "";
       toast(`Signed in as ${res.user.name}`);
+      await showApp(res.user);
     } catch (err) {
       $("#loginMessage").textContent = err.message || "Sign in failed.";
     } finally {
       btn.disabled = false;
       btn.innerHTML = `Sign in <span>→</span>`;
     }
+  });
+
+  // Logout handler (clears session and returns to login screen)
+  $("#logoutButton")?.addEventListener("click", async () => {
+    try {
+      await api("/api/auth/logout", { method: "POST", body: {} });
+    } catch {}
+    state.user = null;
+    state.sets = [];
+    state.activeSet = null;
+    $("#loginForm")?.reset();
+    showAuth("You have been signed out.");
+    toast("Signed out successfully.");
   });
 
   // Dynamic input triggers for prompt builder
@@ -1491,49 +1544,26 @@ function setupEventListeners() {
 }
 
 // =========================================================
-// 10. APP BOOTSTRAP
+// 10. APP BOOTSTRAP (AUTH CHECK & PROFILE INITIALIZATION)
 // =========================================================
 async function init() {
   setupEventListeners();
+  populateCategoryDropdown();
+  updatePromptFromInputs();
 
-  // Load sets from local-first storage
-  state.sets = loadStoredSets();
-
-  // Try to sync with server in background if available
-  try {
-    const serverSets = await api("/api/sets");
-    if (Array.isArray(serverSets) && serverSets.length > 0) {
-      // Merge server sets with local sets
-      const mergedMap = new Map();
-      state.sets.forEach((s) => mergedMap.set(String(s.id), s));
-      serverSets.forEach((s) => {
-        const existing = mergedMap.get(String(s.id));
-        mergedMap.set(String(s.id), { ...s, ...(existing || {}) });
-      });
-      state.sets = Array.from(mergedMap.values());
-      saveStoredSets(state.sets);
-    }
-  } catch (err) {
-    // Offline or standalone mode: working seamlessly from localStorage
-    console.log("Running in offline / standalone localStorage mode.");
-  }
-
-  // Check auth in background (non-blocking)
+  // Verify member session
   try {
     const me = await api("/api/me");
     if (me && me.user) {
-      state.user = me.user;
-      $("#loggedInName").textContent = me.user.name;
+      await showApp(me.user);
+      return;
     }
   } catch (err) {
-    // Local learner mode
-    $("#loggedInName").textContent = "Learner";
+    // 401 or network error -> show member login screen
   }
 
-  populateCategoryDropdown();
-  updatePromptFromInputs();
-  renderFileExplorer();
-  renderHome();
+  // Not signed in: present member login screen
+  showAuth();
 }
 
 init();

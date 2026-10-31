@@ -358,7 +358,7 @@ async function route(req, res) {
 
     if (path === "sets" && method === "GET") {
       const result = await db.execute({ sql: "SELECT * FROM learning_sets WHERE user_id = ? ORDER BY id DESC", args: [member.id] });
-      return send(res, 200, result.rows.map((row) => serializeSet(row)));
+      return send(res, 200, result.rows.map((row) => serializeSet(row, true)));
     }
 
     if (path === "sets" && method === "POST") {

@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -9,8 +9,8 @@
   <link rel="stylesheet" href="/app.css">
 </head>
 <body>
-  <!-- Optional member authentication screen (bypassed in standalone/local mode) -->
-  <div class="auth-screen hidden" id="authScreen">
+  <!-- Member authentication screen -->
+  <div class="auth-screen" id="authScreen">
     <section class="auth-card">
       <a class="brand" href="/"><span class="brand-symbol">c.</span><span class="brand-word">cluewise<small>CROSSWORD COMPANION</small></span></a>
       <div class="eyebrow">YOUR PERSONAL LEARNING SPACE</div>
@@ -23,7 +23,7 @@
         <button class="btn btn-primary btn-wide" id="loginButton">Sign in <span>→</span></button>
       </form>
       <div class="auth-foot">
-        <button class="btn-text-link" id="continueLocalBtn">Continue as Local Learner (Offline) →</button>
+        <button class="btn-text-link" id="continueLocalBtn">Continue as Guest (Local Offline) →</button>
         <div>Accounts are managed by your Cluewise administrator. <a href="/admin">Administrator access</a></div>
       </div>
     </section>
@@ -34,8 +34,8 @@
     </div>
   </div>
 
-  <!-- Main Standalone Application Shell -->
-  <div class="app" id="appShell">
+  <!-- Main Application Shell -->
+  <div class="app hidden" id="appShell">
     <header class="topbar">
       <div class="top-left">
         <button class="sidebar-toggle-btn" id="sidebarToggleBtn" aria-label="Open Sidebar" title="Open Explorer">
@@ -50,6 +50,7 @@
       <div class="top-actions">
         <button class="btn btn-quiet btn-small" id="topAddSetBtn">＋ Import JSON</button>
         <span class="member-chip"><span class="online-dot"></span><span id="loggedInName">Learner</span></span>
+        <button class="btn btn-quiet btn-small" id="logoutButton" title="Sign out of your account">Log out ↗</button>
         <a class="top-link" href="/admin" title="Administrator console">Admin</a>
       </div>
     </header>
