@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f7f8f6">
   <meta name="description" content="Cluewise — Business & Economics Crossword Vocabulary Learning Companion.">
   <title>Cluewise — Business Crossword Learning Companion</title>
-  <link rel="stylesheet" href="/app.css?v=2">
+  <link rel="stylesheet" href="/app.css?v=3">
 </head>
 <body>
   <!-- Member authentication screen -->
@@ -34,9 +34,9 @@
   <div class="app hidden" id="appShell">
     <header class="topbar">
       <div class="top-left">
-        <button class="sidebar-toggle-btn" id="sidebarToggleBtn" aria-label="Open Sidebar" title="Open Explorer">
+        <button class="sidebar-toggle-btn" id="sidebarToggleBtn" aria-label="Toggle Sidebar" title="Toggle Sidebar">
           <span class="toggle-icon">☰</span>
-          <span class="toggle-text">Explorer</span>
+          <span class="toggle-text">Menu</span>
         </button>
         <a class="brand" href="#home">
           <span class="brand-symbol">c.</span>
@@ -46,25 +46,50 @@
       <div class="top-actions">
         <button class="btn btn-quiet btn-small" id="topAddSetBtn">＋ Import JSON</button>
         <span class="member-chip"><span class="online-dot"></span><span id="loggedInName">Learner</span></span>
-        <button class="btn btn-quiet btn-small" id="logoutButton" title="Sign out of your account">Log out ↗</button>
       </div>
     </header>
 
     <!-- Dimmed backdrop for mobile sidebar drawer -->
     <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
-    <div class="app-layout">
-      <!-- Left Sidebar: Real File Explorer Sidebar -->
+    <div class="app-layout" id="appLayout">
+      <!-- Left Sidebar: Collapsible Navigation Sidebar -->
       <aside class="sidebar" id="mainSidebar">
+        <!-- 1. Header with Title & Collapsible Menu Icon Inside -->
         <div class="sidebar-header">
-          <span class="sidebar-title"><span class="nav-icon">📁</span> EXPLORER</span>
-          <button class="sidebar-close-btn" id="sidebarCloseBtn" aria-label="Close sidebar">✕</button>
+          <span class="sidebar-title"><span class="nav-icon">📁</span> NAVIGATION</span>
+          <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" aria-label="Collapse sidebar" title="Collapse sidebar">
+            <span class="collapse-icon">✕</span>
+          </button>
+        </div>
+
+        <!-- 2. Home Page Link -->
+        <div class="sidebar-nav-section">
+          <button class="sidebar-nav-item active" id="sidebarHomeBtn" type="button" title="Go to Home Library">
+            <span class="sidebar-nav-icon">🏠</span>
+            <span class="sidebar-nav-label">Home Page</span>
+          </button>
+        </div>
+
+        <!-- 3. Explorer Tree Section -->
+        <div class="sidebar-section-heading">
+          <span class="side-caption">EXPLORER</span>
         </div>
         <div class="sidebar-body">
-          <!-- File Explorer Tree: pure folder/file navigation -->
           <div id="fileExplorer" class="file-explorer"></div>
-          <div class="sidebar-bottom">
-            <button class="btn btn-primary btn-wide" id="sidebarAddBtn">＋ Import JSON Pack</button>
+        </div>
+
+        <!-- 4. Sidebar Footer with Import & Logout -->
+        <div class="sidebar-footer">
+          <button class="btn btn-primary btn-wide" id="sidebarAddBtn">＋ Import JSON Pack</button>
+          <div class="sidebar-user-card">
+            <div class="sidebar-user-meta">
+              <span class="online-dot"></span>
+              <span class="sidebar-user-name" id="sidebarUserName">Learner</span>
+            </div>
+            <button class="btn btn-quiet btn-small sidebar-logout-btn" id="logoutButton" title="Sign out of your account">
+              <span>Log out</span> ↗
+            </button>
           </div>
         </div>
       </aside>
@@ -303,6 +328,6 @@
   </div>
 
   <div class="toast" id="toast" role="status"></div>
-  <script src="/app.js?v=2" defer></script>
+  <script src="/app.js?v=3" defer></script>
 </body>
 </html>

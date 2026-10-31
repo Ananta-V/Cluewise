@@ -377,36 +377,62 @@ function toast(message) {
 // 4. VIEW & NAVIGATION CONTROLLERS
 // =========================================================
 function openSidebar() {
-  const sidebar = document.getElementById("mainSidebar");
-  const backdrop = document.getElementById("sidebarBackdrop");
-  if (sidebar) sidebar.classList.add("open");
-  if (backdrop) backdrop.classList.add("active");
-  document.body.style.overflow = "hidden";
+  const isMobile = window.innerWidth <= 700;
+  if (isMobile) {
+    const sidebar = document.getElementById("mainSidebar");
+    const backdrop = document.getElementById("sidebarBackdrop");
+    if (sidebar) sidebar.classList.add("open");
+    if (backdrop) backdrop.classList.add("active");
+    document.body.style.overflow = "hidden";
+  } else {
+    const layout = document.getElementById("appLayout") || document.querySelector(".app-layout");
+    if (layout) layout.classList.remove("sidebar-collapsed");
+    try { localStorage.setItem("cluewise_sidebar_collapsed", "false"); } catch {}
+  }
 }
 
-function closeSidebar() {
-  const sidebar = document.getElementById("mainSidebar");
-  const backdrop = document.getElementById("sidebarBackdrop");
-  if (sidebar && sidebar.classList.contains("open")) {
-    sidebar.classList.remove("open");
+function closeSidebar(forceDesktop) {
+  const isMobile = window.innerWidth <= 700;
+  if (isMobile) {
+    const sidebar = document.getElementById("mainSidebar");
+    const backdrop = document.getElementById("sidebarBackdrop");
+    if (sidebar && sidebar.classList.contains("open")) {
+      sidebar.classList.remove("open");
+    }
+    if (backdrop && backdrop.classList.contains("active")) {
+      backdrop.classList.remove("active");
+    }
+    document.body.style.overflow = "";
+  } else if (forceDesktop) {
+    const layout = document.getElementById("appLayout") || document.querySelector(".app-layout");
+    if (layout) layout.classList.add("sidebar-collapsed");
+    try { localStorage.setItem("cluewise_sidebar_collapsed", "true"); } catch {}
   }
-  if (backdrop && backdrop.classList.contains("active")) {
-    backdrop.classList.remove("active");
-  }
-  document.body.style.overflow = "";
 }
 
 function toggleSidebar() {
-  const sidebar = document.getElementById("mainSidebar");
-  if (sidebar && sidebar.classList.contains("open")) {
-    closeSidebar();
+  const isMobile = window.innerWidth <= 700;
+  if (isMobile) {
+    const sidebar = document.getElementById("mainSidebar");
+    if (sidebar && sidebar.classList.contains("open")) {
+      closeSidebar();
+    } else {
+      openSidebar();
+    }
   } else {
-    openSidebar();
+    const layout = document.getElementById("appLayout") || document.querySelector(".app-layout");
+    if (layout && layout.classList.contains("sidebar-collapsed")) {
+      openSidebar();
+    } else {
+      closeSidebar(true);
+    }
   }
 }
 
 function showView(view) {
-  closeSidebar();
+  if (window.innerWidth <= 700) {
+    closeSidebar();
+  }
   state.view = view;
   $("#homeView").classList.toggle("hidden", view === "learning");
   $("#learningView").classList.toggle("hidden", view !== "learning");
@@ -414,6 +440,10 @@ function showView(view) {
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.view === view);
   });
+  const homeBtn = document.getElementById("sidebarHomeBtn");
+  if (homeBtn) {
+    homeBtn.classList.toggle("active", view !== "learning");
+  }
 
   if (view !== "learning") {
     renderHome();
@@ -1397,7 +1427,8 @@ function showAuth(message = "") {
 
 async function showApp(user) {
   state.user = user;
-  $("#loggedInName").textContent = user.name || "Member";
+  if ($("#loggedInName")) $("#loggedInName").textContent = user.name || "Member";
+  if ($("#sidebarUserName")) $("#sidebarUserName").textContent = user.name || "Member";
   $("#authScreen").classList.add("hidden");
   $("#appShell").classList.remove("hidden");
 
@@ -1546,12 +1577,17 @@ function setupEventListeners() {
     if (el) el.addEventListener(sel === "#setFocusArea" ? "input" : "change", updatePromptFromInputs);
   });
 
-  // Sidebar drawer open / close handlers
+  // Sidebar collapse / open handlers
   document.getElementById("sidebarToggleBtn")?.addEventListener("click", toggleSidebar);
-  document.getElementById("sidebarCloseBtn")?.addEventListener("click", closeSidebar);
-  document.getElementById("sidebarBackdrop")?.addEventListener("click", closeSidebar);
+  document.getElementById("sidebarCollapseBtn")?.addEventListener("click", () => closeSidebar(true));
+  document.getElementById("sidebarCloseBtn")?.addEventListener("click", () => closeSidebar(true));
+  document.getElementById("sidebarBackdrop")?.addEventListener("click", () => closeSidebar(true));
+  document.getElementById("sidebarHomeBtn")?.addEventListener("click", () => {
+    state.category = "all";
+    showView("library");
+  });
   window.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeSidebar();
+    if (e.key === "Escape") closeSidebar(true);
   });
 }
 
@@ -1562,6 +1598,15 @@ async function init() {
   setupEventListeners();
   populateCategoryDropdown();
   updatePromptFromInputs();
+
+  // Restore desktop sidebar collapsed preference if saved
+  if (window.innerWidth > 700) {
+    try {
+      if (localStorage.getItem("cluewise_sidebar_collapsed") === "true") {
+        document.getElementById("appLayout")?.classList.add("sidebar-collapsed");
+      }
+    } catch {}
+  }
 
   // Verify member session
   try {
