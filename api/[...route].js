@@ -280,6 +280,42 @@ async function route(req, res) {
     return send(res, 200, { ok: true, app: "Cluewise", database: "supabase", project: projectId });
   }
 
+  // ── Curriculum Configuration (Categories, Levels, Prompt Template) ─────────
+  if (path === "curriculum-config" && method === "GET") {
+    try {
+      const [catRes, levRes, tplRes] = await Promise.all([
+        db.from("curriculum_categories")
+          .select("domain_name, category_name, topics, sort_order")
+          .order("sort_order", { ascending: true })
+          .order("id", { ascending: true }),
+        db.from("curriculum_levels")
+          .select("level_code, label, depth_description, sort_order")
+          .order("sort_order", { ascending: true }),
+        db.from("curriculum_templates")
+          .select("template_key, prompt_template")
+          .eq("template_key", "curriculum_planning_prompt")
+          .limit(1)
+      ]);
+
+      return send(res, 200, {
+        ok: true,
+        categories: catRes.data || [],
+        levels: levRes.data || [],
+        template: tplRes.data?.[0]?.prompt_template || ""
+      });
+    } catch (err) {
+      // Graceful fallback if tables are not yet created in Supabase
+      return send(res, 200, {
+        ok: false,
+        fallback: true,
+        error: err.message,
+        categories: [],
+        levels: [],
+        template: ""
+      });
+    }
+  }
+
   // ── Member login ──────────────────────────────────────────────────────────
   if (path === "auth/login" && method === "POST") {
     const name = String(body.name || "").trim();

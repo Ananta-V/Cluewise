@@ -86,10 +86,22 @@ const CURRICULUM_CATALOG = [
 ];
 
 
-// Helper to look up Domain for a Category from CURRICULUM_CATALOG
+// Helper to look up Domain for a Category from CURRICULUM_CATALOG or DB config
 function getDomainForCategory(catName) {
   if (!catName || typeof catName !== "string") return "";
   const query = catName.trim().toLowerCase();
+
+  // 1. Check database-backed configuration cached in browser memory
+  if (state.curriculumConfig && Array.isArray(state.curriculumConfig.categories)) {
+    const match = state.curriculumConfig.categories.find(
+      c => (c.category_name || "").trim().toLowerCase() === query
+    );
+    if (match && match.domain_name) {
+      return match.domain_name.replace(/^Domain\s+[A-Z]\s*[-—]\s*/i, "").trim();
+    }
+  }
+
+  // 2. Fallback to hardcoded catalogue
   for (const group of CURRICULUM_CATALOG) {
     if (group.categories.some(c => c.name.toLowerCase() === query)) {
       return group.domain.replace(/^Domain\s+[A-Z]\s*[-—]\s*/i, "").trim();
@@ -908,11 +920,55 @@ function markStepDone() {
 }
 
 // =========================================================
-// 8. IMPORT MODAL & PROMPT BUILDER
+// 8. IMPORT MODAL & PROMPT BUILDER (DATABASE-BACKED CONFIG)
 // =========================================================
+
+// Loads categories, learning levels and prompt templates from browser cache or DB
+async function loadCurriculumConfig(force = false) {
+  const CACHE_KEY = "cluewise_curriculum_cache";
+  const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours in browser memory
+  const now = Date.now();
+
+  // 1. Instant load from browser memory / local storage (zero db queries)
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed && parsed.data && Array.isArray(parsed.data.categories) && parsed.data.categories.length) {
+        state.curriculumConfig = parsed.data;
+        populateCategoryDropdown();
+        populateDifficultyDropdown();
+        updatePromptFromInputs();
+
+        // If cache is fresh and not forced, stop here (no DB hit)
+        if (!force && (now - (parsed.timestamp || 0) < CACHE_TTL)) {
+          return;
+        }
+      }
+    }
+  } catch {}
+
+  // 2. Fetch from DB when cache is expired or missing
+  try {
+    const res = await api("/api/curriculum-config");
+    if (res && Array.isArray(res.categories) && res.categories.length) {
+      state.curriculumConfig = res;
+      populateCategoryDropdown();
+      populateDifficultyDropdown();
+      updatePromptFromInputs();
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: now, data: res }));
+      } catch {}
+    }
+  } catch (err) {
+    // Graceful offline fallback
+  }
+}
+
 function openImport() {
   $("#importMessage").textContent = "";
   populateCategoryDropdown();
+  populateDifficultyDropdown();
   updatePromptFromInputs();
   $("#importModal").classList.remove("hidden");
 }
@@ -924,9 +980,57 @@ function closeImport() {
 function populateCategoryDropdown() {
   const select = $("#setCategorySelect");
   if (!select) return;
+
+  // If DB categories are loaded, render dynamically
+  if (state.curriculumConfig && Array.isArray(state.curriculumConfig.categories) && state.curriculumConfig.categories.length > 0) {
+    const prevVal = select.value;
+    const groups = {};
+    state.curriculumConfig.categories.forEach(item => {
+      const dom = item.domain_name || "Business & Economics";
+      if (!groups[dom]) groups[dom] = [];
+      groups[dom].push(item);
+    });
+
+    let html = "";
+    Object.keys(groups).forEach(dom => {
+      html += `<optgroup label="${escapeHtml(dom)}">`;
+      groups[dom].forEach(cat => {
+        const topicsAttr = escapeHtml(cat.topics || "");
+        const catName = escapeHtml(cat.category_name || "");
+        html += `<option value="${catName}" data-topics="${topicsAttr}">${catName}</option>`;
+      });
+      html += `</optgroup>`;
+    });
+    html += `<optgroup label="Other"><option value="Custom">Custom / Other Category...</option></optgroup>`;
+    select.innerHTML = html;
+    if (prevVal && select.querySelector(`option[value="${CSS.escape(prevVal)}"]`)) {
+      select.value = prevVal;
+    }
+  }
+
   // When category changes, refresh the prompt automatically
   select.onchange = () => updatePromptFromInputs();
 }
+
+function populateDifficultyDropdown() {
+  const select = $("#setDifficulty");
+  if (!select) return;
+
+  if (state.curriculumConfig && Array.isArray(state.curriculumConfig.levels) && state.curriculumConfig.levels.length > 0) {
+    const prevVal = select.value;
+    let html = "";
+    state.curriculumConfig.levels.forEach(lvl => {
+      html += `<option value="${escapeHtml(lvl.level_code)}">${escapeHtml(lvl.label)}</option>`;
+    });
+    select.innerHTML = html;
+    if (prevVal && select.querySelector(`option[value="${CSS.escape(prevVal)}"]`)) {
+      select.value = prevVal;
+    }
+  }
+
+  select.onchange = () => updatePromptFromInputs();
+}
+
 function updatePromptFromInputs() {
   const select = $("#setCategorySelect");
   const category = select?.value || "Economic Fundamentals";
@@ -943,7 +1047,16 @@ function updatePromptFromInputs() {
     : 'Focus Area: None specified (blank).\n' +
       '  - Plan and cover the complete "' + category + '" category (under the "' + domain + '" domain) across all its relevant subcategories.';
 
-  const levelDescriptions = {
+  // Check if DB configuration has depth descriptions
+  let levelDesc = "";
+  if (state.curriculumConfig && Array.isArray(state.curriculumConfig.levels)) {
+    const lvlMatch = state.curriculumConfig.levels.find(l => l.level_code === level);
+    if (lvlMatch && lvlMatch.depth_description) {
+      levelDesc = lvlMatch.depth_description;
+    }
+  }
+
+  const defaultLevelDescriptions = {
     beginner: 'BEGINNER depth:\n' +
       '- Basic terminology, simple definitions, and fundamental concepts.\n' +
       '- Term recognition and basic conceptual differences.\n' +
@@ -971,7 +1084,23 @@ function updatePromptFromInputs() {
       '- Mix suitable formats (e.g. crossword_clue_interpretation, indirect_definition, odd_one_out, case_study, concept_association, statement_based).'
   };
 
+  const finalLevelDescription = levelDesc || defaultLevelDescriptions[level] || defaultLevelDescriptions.beginner;
   const FENCE = String.fromCharCode(96, 96, 96);
+
+  // If a custom template is stored in the database, interpolate it!
+  if (state.curriculumConfig && state.curriculumConfig.template && state.curriculumConfig.template.length > 80) {
+    let tpl = state.curriculumConfig.template;
+    tpl = tpl.replace(/\{\{DOMAIN\}\}/g, domain);
+    tpl = tpl.replace(/\{\{CATEGORY\}\}/g, category);
+    tpl = tpl.replace(/\{\{LEVEL\}\}/g, level);
+    tpl = tpl.replace(/\{\{LEVEL_DESCRIPTION\}\}/g, finalLevelDescription);
+    tpl = tpl.replace(/\{\{FOCUS_INSTRUCTION\}\}/g, focusInstruction);
+    tpl = tpl.replace(/\{\{FOCUS_RAW\}\}/g, focusRaw);
+    tpl = tpl.replace(/\{\{FENCE\}\}/g, FENCE);
+    const outputEl = $("#promptOutput");
+    if (outputEl) outputEl.textContent = tpl;
+    return;
+  }
 
   const prompt = [
     'You are an expert curriculum planner and crossword vocabulary educator specialising in Business & Economics.',
@@ -1596,7 +1725,9 @@ function setupEventListeners() {
 // =========================================================
 async function init() {
   setupEventListeners();
+  loadCurriculumConfig(); // Instant browser cache first, quiet background refresh if needed
   populateCategoryDropdown();
+  populateDifficultyDropdown();
   updatePromptFromInputs();
 
   // Restore desktop sidebar collapsed preference if saved
