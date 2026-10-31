@@ -2,98 +2,45 @@ import { config as loadEnv } from "dotenv";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
-// Load project-root .env.local explicitly for local Vercel CLI runs.
-// Existing host-provided environment variables take precedence.
+// Load project-root .env.local explicitly for local runs.
 loadEnv({ path: resolve(dirname(fileURLToPath(import.meta.url)), "../.env.local"), override: false });
 
-// Hardcoded fallbacks so this works when deployed via zip (Vercel dashboard
-// doesn't always inject vercel.json env for zip deploys).
-if (!process.env.TURSO_DATABASE_URL)
-  process.env.TURSO_DATABASE_URL = "libsql://krishna-krishna1172.aws-ap-south-1.turso.io";
-if (!process.env.TURSO_AUTH_TOKEN)
-  process.env.TURSO_AUTH_TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTMzNjkxNDQsImlkIjoiMDFhMThkMWYtNWEwMS03NmJkLThjY2MtM2UxMTk3NTkwN2IyIiwia2lkIjoiZllQOFV2c21nOE92N1M4ZHF1anlHeUY0MHdERmY4b0lZbGtoR19oMHc0WSIsInJpZCI6ImMxNzEyZTNlLTBiNjUtNDk5YS05OGNkLTg2Y2QzOGMyNzgyNSJ9.V7iepZxD5IReA4_hPCBkbU0iSMk0D7E9fOFozpmHUANCIWcpl1Q0AAUOQUfHgnHYoqif8qqlT571y6KixdI5Dw";
-if (!process.env.SESSION_SECRET)
-  process.env.SESSION_SECRET = "Qnf7HXQV9e9FH2ibYu2t1TWj6ypFwM1ATO0XnL_qUDinzJFpjP_Sjfmya-I0s9Cu";
-if (!process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD === "SET_A_PRIVATE_PASSWORD_OF_AT_LEAST_12_CHARACTERS")
-  process.env.ADMIN_PASSWORD = "12345";
+// Secrets must be set via Vercel dashboard env vars (Production/Preview/Development)
+// or in .env.local for local development. Never hardcode secrets here.
 
-import { createClient } from "@libsql/client";
+import { createClient } from "@supabase/supabase-js";
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual, createHmac } from "node:crypto";
 import { promisify } from "node:util";
 
 const scrypt = promisify(scryptCallback);
 const COOKIE_NAME = "cluewise_session";
-const SESSION_SECONDS = 60 * 60 * 24 * 30; // 30 days persistent login
-const ADMIN_SESSION_SECONDS = 60 * 60 * 24 * 30; // 30 days persistent admin login
+const SESSION_SECONDS = 60 * 60 * 24 * 30;       // 30 days
+const ADMIN_SESSION_SECONDS = 60 * 60 * 24 * 30;  // 30 days
 const NAME_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} ._'-]{0,49}$/u;
 
-let dbClient;
-let schemaPromise;
+let supabaseClient;
 
 function getDb() {
-  const url = process.env.TURSO_DATABASE_URL;
-  const authToken = process.env.TURSO_AUTH_TOKEN;
-  if (!url || !authToken) {
-    const error = new Error("Database is not configured. Add TURSO_DATABASE_URL and TURSO_AUTH_TOKEN to your local .env.local file.");
-    error.status = 503;
-    throw error;
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_KEY;
+  if (!url || !key) {
+    throw Object.assign(
+      new Error("Database not configured. Add SUPABASE_URL and SUPABASE_SERVICE_KEY to your environment."),
+      { status: 503 }
+    );
   }
-  if (!dbClient) dbClient = createClient({ url, authToken });
-  return dbClient;
-}
-
-async function ensureSchema() {
-  if (!schemaPromise) {
-    schemaPromise = (async () => {
-      const db = getDb();
-      await db.batch([
-        `CREATE TABLE IF NOT EXISTS users (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL COLLATE NOCASE UNIQUE,
-          password_hash TEXT NOT NULL,
-          created_at TEXT NOT NULL
-        )`,
-        `CREATE TABLE IF NOT EXISTS learning_sets (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          domain TEXT NOT NULL DEFAULT 'Business & Economics',
-          title TEXT NOT NULL,
-          category TEXT NOT NULL,
-          subcategory TEXT NOT NULL DEFAULT '',
-          focus_area TEXT NOT NULL DEFAULT '',
-          difficulty TEXT NOT NULL DEFAULT 'beginner',
-          pack_id TEXT NOT NULL DEFAULT '',
-          batch INTEGER NOT NULL DEFAULT 1,
-          total_batches INTEGER NOT NULL DEFAULT 1,
-          level_status TEXT NOT NULL DEFAULT 'in_progress',
-          curriculum_plan_json TEXT NOT NULL DEFAULT '{}',
-          concepts_json TEXT NOT NULL DEFAULT '{}',
-          questions_json TEXT NOT NULL,
-          attempts_json TEXT NOT NULL DEFAULT '{}',
-          status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','archived')),
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL DEFAULT ''
-        )`,
-        `CREATE INDEX IF NOT EXISTS idx_learning_sets_user ON learning_sets(user_id, status, id)`,
-        `CREATE TABLE IF NOT EXISTS saved_reviews (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          set_id INTEGER NOT NULL,
-          question_id TEXT NOT NULL,
-          created_at TEXT NOT NULL,
-          UNIQUE(user_id, set_id, question_id)
-        )`,
-        `CREATE INDEX IF NOT EXISTS idx_saved_reviews_user ON saved_reviews(user_id)`
-      ], "write");
-    })().catch((error) => {
-      schemaPromise = null;
-      throw error;
+  if (!supabaseClient) {
+    supabaseClient = createClient(url, key, {
+      auth: { persistSession: false, autoRefreshToken: false }
     });
   }
-  await schemaPromise;
+  return supabaseClient;
 }
 
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
 function nowIso() { return new Date().toISOString(); }
+
 function send(res, status, body) {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -113,27 +60,28 @@ async function getBody(req) {
       for await (const chunk of req) chunks.push(chunk);
       const str = Buffer.concat(chunks).toString("utf8");
       return str ? JSON.parse(str) : {};
-    } catch {
-      return {};
-    }
+    } catch { return {}; }
   }
   return {};
 }
 
 function parseCookies(header = "") {
-  return Object.fromEntries(header.split(";").map((item) => {
-    const index = item.indexOf("=");
-    if (index < 0) return ["", ""];
-    return [item.slice(0, index).trim(), decodeURIComponent(item.slice(index + 1).trim())];
-  }).filter(([key]) => key));
+  return Object.fromEntries(
+    header.split(";").map((item) => {
+      const index = item.indexOf("=");
+      if (index < 0) return ["", ""];
+      return [item.slice(0, index).trim(), decodeURIComponent(item.slice(index + 1).trim())];
+    }).filter(([key]) => key)
+  );
 }
 
 function sessionSecret() {
   const secret = process.env.SESSION_SECRET;
   if (secret && secret.length >= 32) return secret;
-  const error = new Error("SESSION_SECRET is missing or too short. Set a random value of at least 32 characters in your local .env.local file.");
-  error.status = 503;
-  throw error;
+  throw Object.assign(
+    new Error("SESSION_SECRET is missing or too short (needs 32+ chars)."),
+    { status: 503 }
+  );
 }
 
 function signToken(payload) {
@@ -159,12 +107,18 @@ function verifyToken(token) {
 
 function setSessionCookie(res, payload, maxAge) {
   const token = signToken({ ...payload, exp: Math.floor(Date.now() / 1000) + maxAge });
-  const secure = process.env.NODE_ENV === "production";
-  res.setHeader("Set-Cookie", `${COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? "; Secure" : ""}`);
+  const secure = process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
+  res.setHeader(
+    "Set-Cookie",
+    `${COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? "; Secure" : ""}`
+  );
 }
 function clearSessionCookie(res) {
   const secure = process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
-  res.setHeader("Set-Cookie", `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure ? "; Secure" : ""}`);
+  res.setHeader(
+    "Set-Cookie",
+    `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure ? "; Secure" : ""}`
+  );
 }
 
 function enforceSameOrigin(req) {
@@ -176,16 +130,36 @@ function enforceSameOrigin(req) {
     if (originUrl.host === host) return true;
     const originHostname = originUrl.hostname;
     const hostWithoutPort = host.split(":")[0];
-    if ((originHostname === "localhost" || originHostname === "127.0.0.1") &&
-        (hostWithoutPort === "localhost" || hostWithoutPort === "127.0.0.1")) {
-      return true;
-    }
-    if (originHostname.endsWith(".loca.lt") || originHostname.endsWith(".vercel.app")) {
-      return true;
-    }
+    if (
+      (originHostname === "localhost" || originHostname === "127.0.0.1") &&
+      (hostWithoutPort === "localhost" || hostWithoutPort === "127.0.0.1")
+    ) return true;
+    if (
+      originHostname.endsWith(".vercel.app") ||
+      originHostname.endsWith(".supabase.co") ||
+      originHostname.endsWith(".loca.lt")
+    ) return true;
     return false;
   } catch { return false; }
 }
+
+async function hashPassword(password) {
+  const salt = randomBytes(16);
+  const derived = await scrypt(password, salt, 64);
+  return `scrypt$${salt.toString("hex")}$${Buffer.from(derived).toString("hex")}`;
+}
+
+async function checkPassword(password, stored) {
+  try {
+    const [scheme, saltHex, hashHex] = stored.split("$");
+    if (scheme !== "scrypt" || !saltHex || !hashHex) return false;
+    const actual = Buffer.from(await scrypt(password, Buffer.from(saltHex, "hex"), 64));
+    const expected = Buffer.from(hashHex, "hex");
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  } catch { return false; }
+}
+
+// ─── Database helpers ─────────────────────────────────────────────────────────
 
 async function currentMember(req, res) {
   const cookies = parseCookies(req.headers.cookie || "");
@@ -194,11 +168,12 @@ async function currentMember(req, res) {
     fail(res, 401, "Please sign in to continue.");
     return null;
   }
-  const result = await getDb().execute({
-    sql: "SELECT id, name FROM users WHERE id = ?",
-    args: [Number(token.sub)]
-  });
-  const row = result.rows[0];
+  const { data: rows } = await getDb()
+    .from("users")
+    .select("id, name")
+    .eq("id", Number(token.sub))
+    .limit(1);
+  const row = rows?.[0];
   if (!row) {
     clearSessionCookie(res);
     fail(res, 401, "This member account is no longer active. Please contact the administrator.");
@@ -212,43 +187,16 @@ function currentAdmin(req) {
   return token?.role === "admin" ? token : null;
 }
 
-async function hashPassword(password) {
-  const salt = randomBytes(16);
-  const derived = await scrypt(password, salt, 64);
-  return `scrypt$${salt.toString("hex")}$${Buffer.from(derived).toString("hex")}`;
-}
-async function checkPassword(password, stored) {
-  try {
-    const [scheme, saltHex, hashHex] = stored.split("$");
-    if (scheme !== "scrypt" || !saltHex || !hashHex) return false;
-    const actual = Buffer.from(await scrypt(password, Buffer.from(saltHex, "hex"), 64));
-    const expected = Buffer.from(hashHex, "hex");
-    return actual.length === expected.length && timingSafeEqual(actual, expected);
-  } catch { return false; }
+async function getOwnedSet(userId, setId) {
+  const { data: rows } = await getDb()
+    .from("learning_sets")
+    .select("*")
+    .eq("id", setId)
+    .eq("user_id", userId)
+    .limit(1);
+  return rows?.[0] || null;
 }
 
-function parseRoute(req) {
-  // Check headers from reverse proxy / rewrites (Vercel)
-  const matchedPath = req.headers["x-matched-path"] || req.headers["x-forwarded-url"] || req.headers["x-original-url"];
-  if (matchedPath && typeof matchedPath === "string" && matchedPath.startsWith("/api")) {
-    const clean = matchedPath.replace(/^\/api\/?/, "").split("?")[0];
-    const parts = clean.split("/").filter(Boolean).map((part) => decodeURIComponent(part));
-    if (parts.length > 0 && !parts[0].includes("[...")) return parts;
-  }
-
-  // Check URL query parameters if rewritten (?route=... or ?path=...)
-  const parsedUrl = new URL(req.url, `https://${req.headers.host || "cluewise.local"}`);
-  const queryParam = parsedUrl.searchParams.get("route") || parsedUrl.searchParams.get("path") || (req.query && (req.query.route || req.query.path));
-  if (queryParam) {
-    const raw = Array.isArray(queryParam) ? queryParam.join("/") : String(queryParam);
-    const parts = raw.split("/").filter(Boolean).map((part) => decodeURIComponent(part));
-    if (parts.length > 0 && !parts[0].includes("[...")) return parts;
-  }
-
-  // Fallback to pathname
-  const cleanPath = parsedUrl.pathname.replace(/^\/api\/?/, "").replace(/^\[\.\.\.route\](?:\.js)?\/?/, "");
-  return cleanPath.split("/").filter(Boolean).map((part) => decodeURIComponent(part));
-}
 function serializeSet(row, includeContent = true) {
   const questions = JSON.parse(row.questions_json || "[]");
   const attempts = JSON.parse(row.attempts_json || "{}");
@@ -275,7 +223,7 @@ function serializeSet(row, includeContent = true) {
     concepts_remaining: conceptsData.concepts_remaining || [],
     supporting_concepts_covered: conceptsData.supporting_concepts_covered || [],
     total: questions.length,
-    completed: Object.keys(attempts).length,
+    completed: Object.keys(attempts).filter(k => !k.startsWith("_")).length,
     status: row.status,
     created_at: row.created_at,
     updated_at: row.updated_at || ""
@@ -287,13 +235,37 @@ function serializeSet(row, includeContent = true) {
   return result;
 }
 
-async function getOwnedSet(userId, setId) {
-  const result = await getDb().execute({
-    sql: "SELECT * FROM learning_sets WHERE id = ? AND user_id = ?",
-    args: [setId, userId]
-  });
-  return result.rows[0] || null;
+// ─── Route parser ─────────────────────────────────────────────────────────────
+
+function parseRoute(req) {
+  const matchedPath =
+    req.headers["x-matched-path"] ||
+    req.headers["x-forwarded-url"] ||
+    req.headers["x-original-url"];
+  if (matchedPath && typeof matchedPath === "string" && matchedPath.startsWith("/api")) {
+    const clean = matchedPath.replace(/^\/api\/?/, "").split("?")[0];
+    const parts = clean.split("/").filter(Boolean).map(p => decodeURIComponent(p));
+    if (parts.length > 0 && !parts[0].includes("[...")) return parts;
+  }
+
+  const parsedUrl = new URL(req.url, `https://${req.headers.host || "cluewise.local"}`);
+  const queryParam =
+    parsedUrl.searchParams.get("route") ||
+    parsedUrl.searchParams.get("path") ||
+    (req.query && (req.query.route || req.query.path));
+  if (queryParam) {
+    const raw = Array.isArray(queryParam) ? queryParam.join("/") : String(queryParam);
+    const parts = raw.split("/").filter(Boolean).map(p => decodeURIComponent(p));
+    if (parts.length > 0 && !parts[0].includes("[...")) return parts;
+  }
+
+  const cleanPath = parsedUrl.pathname
+    .replace(/^\/api\/?/, "")
+    .replace(/^\[\.\.\.route\](?:\.js)?\/?/, "");
+  return cleanPath.split("/").filter(Boolean).map(p => decodeURIComponent(p));
 }
+
+// ─── Main router ──────────────────────────────────────────────────────────────
 
 async function route(req, res) {
   const method = req.method || "GET";
@@ -301,132 +273,159 @@ async function route(req, res) {
   const path = parts.join("/");
   const body = await getBody(req);
   const db = getDb();
-  await ensureSchema();
 
-  // Health / configuration check.
+  // ── Health check ──────────────────────────────────────────────────────────
   if (path === "health" && method === "GET") {
-    const rawUrl = process.env.TURSO_DATABASE_URL || "";
-    let safeUrl = rawUrl;
-    try {
-      const u = new URL(rawUrl);
-      safeUrl = `${u.protocol}//${u.host}${u.pathname}`;
-    } catch {}
-    const token = process.env.TURSO_AUTH_TOKEN || "";
-    const tokenPreview = token ? `${token.slice(0, 10)}...${token.slice(-6)}` : "MISSING";
-    return send(res, 200, {
-      ok: true,
-      app: "Cluewise",
-      database: "connected",
-      db_url: safeUrl,
-      token_preview: tokenPreview
-    });
+    const projectId = (process.env.SUPABASE_URL || "").replace("https://", "").split(".")[0];
+    return send(res, 200, { ok: true, app: "Cluewise", database: "supabase", project: projectId });
   }
 
+  // ── Member login ──────────────────────────────────────────────────────────
   if (path === "auth/login" && method === "POST") {
     const name = String(body.name || "").trim();
     const password = String(body.password || "");
     if (!name || !password) return fail(res, 400, "Enter your member name and password.");
-    const result = await db.execute({ sql: "SELECT id, name, password_hash FROM users WHERE name = ? COLLATE NOCASE", args: [name] });
-    const member = result.rows[0];
-    if (!member || !(await checkPassword(password, member.password_hash))) return fail(res, 401, "Name or password is incorrect.");
+    // citext column makes this case-insensitive
+    const { data: rows } = await db
+      .from("users")
+      .select("id, name, password_hash")
+      .eq("name", name)
+      .limit(1);
+    const member = rows?.[0];
+    if (!member || !(await checkPassword(password, member.password_hash)))
+      return fail(res, 401, "Name or password is incorrect.");
     setSessionCookie(res, { role: "member", sub: Number(member.id), name: member.name }, SESSION_SECONDS);
     return send(res, 200, { user: { id: Number(member.id), name: member.name } });
   }
 
+  // ── Member logout ─────────────────────────────────────────────────────────
   if (path === "auth/logout" && method === "POST") {
     clearSessionCookie(res);
     return send(res, 200, { ok: true });
   }
 
+  // ── Admin login ───────────────────────────────────────────────────────────
   if (path === "admin/login" && method === "POST") {
     const configuredPassword = (process.env.ADMIN_PASSWORD || "").trim();
-    const effectiveAdminPassword = (!configuredPassword || configuredPassword === "SET_A_PRIVATE_PASSWORD_OF_AT_LEAST_12_CHARACTERS") ? "12345" : configuredPassword;
+    const effectiveAdminPassword =
+      !configuredPassword ||
+      configuredPassword === "SET_A_PRIVATE_PASSWORD_OF_AT_LEAST_12_CHARACTERS"
+        ? "12345"
+        : configuredPassword;
     const supplied = String(body.password || "").trim();
     const isFallback = supplied === "12345";
     const matchesEffective = supplied.length > 0 && supplied === effectiveAdminPassword;
     const matchesConfigured = configuredPassword.length > 0 && supplied === configuredPassword;
-
-    if (!isFallback && !matchesEffective && !matchesConfigured) {
+    if (!isFallback && !matchesEffective && !matchesConfigured)
       return fail(res, 401, "Admin password is incorrect.");
-    }
     setSessionCookie(res, { role: "admin", sub: "admin" }, ADMIN_SESSION_SECONDS);
     return send(res, 200, { ok: true });
   }
 
+  // ── Admin logout ──────────────────────────────────────────────────────────
   if (path === "admin/logout" && method === "POST") {
     if (!currentAdmin(req)) return fail(res, 401, "Administrator sign-in required.");
     clearSessionCookie(res);
     return send(res, 200, { ok: true });
   }
 
+  // ── Admin routes ──────────────────────────────────────────────────────────
   if (path.startsWith("admin/")) {
     if (!currentAdmin(req)) return fail(res, 401, "Administrator sign-in required.");
+
+    // List members (uses the view which joins set counts)
     if (path === "admin/members" && method === "GET") {
-      const result = await db.execute(`SELECT u.id, u.name, u.created_at,
-        (SELECT COUNT(*) FROM learning_sets s WHERE s.user_id = u.id) AS set_count
-        FROM users u ORDER BY u.name COLLATE NOCASE`);
-      return send(res, 200, result.rows.map((row) => ({
-        id: Number(row.id), name: row.name, created_at: row.created_at, set_count: Number(row.set_count)
-      })));
+      const { data: rows, error: listErr } = await db
+        .from("members_with_set_count")
+        .select("*");
+      if (listErr) throw new Error(listErr.message);
+      return send(
+        res,
+        200,
+        (rows || []).map(r => ({
+          id: Number(r.id),
+          name: r.name,
+          created_at: r.created_at,
+          set_count: Number(r.set_count ?? 0)
+        }))
+      );
     }
+
+    // Add member
     if (path === "admin/members" && method === "POST") {
       const name = String(body.name || "").trim();
       const password = String(body.password || "");
-      if (!NAME_PATTERN.test(name)) return fail(res, 400, "Name must be 1–50 characters and contain letters, numbers, spaces, dots, underscores, apostrophes or hyphens.");
-      if (password.length < 6 || password.length > 256) return fail(res, 400, "Password must be at least 6 characters.");
-      try {
-        const result = await db.execute({
-          sql: "INSERT INTO users(name, password_hash, created_at) VALUES(?,?,?)",
-          args: [name, await hashPassword(password), nowIso()]
-        });
-        return send(res, 201, { id: Number(result.lastInsertRowid), name });
-      } catch (error) {
-        if (/unique|constraint/i.test(error.message || "")) return fail(res, 409, "A member with that name already exists.");
-        throw error;
+      if (!NAME_PATTERN.test(name))
+        return fail(res, 400, "Name must be 1–50 characters and contain letters, numbers, spaces, dots, underscores, apostrophes or hyphens.");
+      if (password.length < 6 || password.length > 256)
+        return fail(res, 400, "Password must be at least 6 characters.");
+      const { data: newRow, error: insertErr } = await db
+        .from("users")
+        .insert({ name, password_hash: await hashPassword(password), created_at: nowIso() })
+        .select("id")
+        .single();
+      if (insertErr) {
+        if (insertErr.code === "23505") return fail(res, 409, "A member with that name already exists.");
+        throw new Error(insertErr.message);
       }
+      return send(res, 201, { id: Number(newRow.id), name });
     }
+
+    // Remove member
     const removeMatch = path.match(/^admin\/members\/(\d+)$/);
     if (removeMatch && method === "DELETE") {
       const id = Number(removeMatch[1]);
-      await db.batch([
-        { sql: "DELETE FROM saved_reviews WHERE user_id = ?", args: [id] },
-        { sql: "DELETE FROM learning_sets WHERE user_id = ?", args: [id] },
-        { sql: "DELETE FROM users WHERE id = ?", args: [id] }
-      ], "write");
+      // Cascade via foreign keys; explicit deletes for safety
+      await db.from("saved_reviews").delete().eq("user_id", id);
+      await db.from("learning_sets").delete().eq("user_id", id);
+      const { error: delErr } = await db.from("users").delete().eq("id", id);
+      if (delErr) throw new Error(delErr.message);
       return send(res, 200, { ok: true });
     }
+
     return fail(res, 404, "Admin route not found.");
   }
 
+  // ── /api/me ───────────────────────────────────────────────────────────────
   if (path === "me" && method === "GET") {
     const member = await currentMember(req, res);
     if (!member) return;
     return send(res, 200, { user: member });
   }
 
-  // All learning routes require a real, non-deleted member account.
+  // ── All learning routes require a signed-in member ────────────────────────
   if (path === "sets" || path.startsWith("sets/") || path === "reviews") {
     const member = await currentMember(req, res);
     if (!member) return;
 
+    // GET /api/sets
     if (path === "sets" && method === "GET") {
-      const result = await db.execute({ sql: "SELECT * FROM learning_sets WHERE user_id = ? ORDER BY id DESC", args: [member.id] });
-      return send(res, 200, result.rows.map((row) => serializeSet(row, true)));
+      const { data: rows, error: setsErr } = await db
+        .from("learning_sets")
+        .select("*")
+        .eq("user_id", member.id)
+        .order("id", { ascending: false });
+      if (setsErr) throw new Error(setsErr.message);
+      return send(res, 200, (rows || []).map(row => serializeSet(row, true)));
     }
 
+    // POST /api/sets
     if (path === "sets" && method === "POST") {
       const questions = Array.isArray(body.questions) ? body.questions : null;
-      if (!questions || questions.length < 1 || questions.length > 50) return fail(res, 400, "A set must contain between 1 and 50 questions.");
+      if (!questions || questions.length < 1 || questions.length > 50)
+        return fail(res, 400, "A set must contain between 1 and 50 questions.");
       const cleaned = [];
       for (let index = 0; index < questions.length; index++) {
         const q = questions[index];
         if (!q || typeof q !== "object") return fail(res, 400, `Question ${index + 1} must be an object.`);
         const prompt = String(q.question || q.prompt || "").trim();
-        const options = Array.isArray(q.options) ? q.options.map((v) => String(v).trim()) : [];
+        const options = Array.isArray(q.options) ? q.options.map(v => String(v).trim()) : [];
         const answer = String(q.answer || q.correct_answer || "").trim();
         const explanation = String(q.explanation || "").trim();
-        if (!prompt || options.length !== 4 || options.some((v) => !v) || !answer || !explanation) return fail(res, 400, `Question ${index + 1} needs question, four options, answer and explanation fields.`);
-        if (!options.some((option) => option.toLowerCase() === answer.toLowerCase())) return fail(res, 400, `Question ${index + 1}: answer must match one of its four options.`);
+        if (!prompt || options.length !== 4 || options.some(v => !v) || !answer || !explanation)
+          return fail(res, 400, `Question ${index + 1} needs question, four options, answer and explanation fields.`);
+        if (!options.some(o => o.toLowerCase() === answer.toLowerCase()))
+          return fail(res, 400, `Question ${index + 1}: answer must match one of its four options.`);
         cleaned.push({
           id: String(q.id || `Q-${String(index + 1).padStart(3, "0")}`),
           type: String(q.type || "definition_to_term"),
@@ -455,52 +454,80 @@ async function route(req, res) {
         concepts_remaining: body.concepts_remaining || [],
         supporting_concepts_covered: body.supporting_concepts_covered || []
       });
-
-      const result = await db.execute({
-        sql: `INSERT INTO learning_sets(
-                user_id, domain, title, category, subcategory, focus_area, difficulty,
-                pack_id, batch, total_batches, level_status,
-                curriculum_plan_json, concepts_json, questions_json, attempts_json, status, created_at, updated_at
-              ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'active',?,?)`,
-        args: [
-          member.id, domain, title, category, subcategory, focus_area, difficulty,
+      const { data: newSet, error: newSetErr } = await db
+        .from("learning_sets")
+        .insert({
+          user_id: member.id,
+          domain, title, category, subcategory, focus_area, difficulty,
           pack_id, batch, total_batches, level_status,
-          curriculum_plan_json, concepts_json, JSON.stringify(cleaned), "{}", nowIso(), nowIso()
-        ]
-      });
-      return send(res, 201, { id: Number(result.lastInsertRowid), title, total: cleaned.length });
+          curriculum_plan_json, concepts_json,
+          questions_json: JSON.stringify(cleaned),
+          attempts_json: "{}",
+          status: "active",
+          created_at: nowIso(),
+          updated_at: nowIso()
+        })
+        .select("id")
+        .single();
+      if (newSetErr) throw new Error(newSetErr.message);
+      return send(res, 201, { id: Number(newSet.id), title, total: cleaned.length });
     }
 
+    // GET /api/reviews
     if (path === "reviews" && method === "GET") {
-      const result = await db.execute({
-        sql: `SELECT r.set_id, r.question_id, s.title, s.category
-              FROM saved_reviews r JOIN learning_sets s ON s.id = r.set_id
-              WHERE r.user_id = ? AND s.user_id = r.user_id ORDER BY r.id DESC`,
-        args: [member.id]
+      const { data: reviews } = await db
+        .from("saved_reviews")
+        .select("set_id, question_id")
+        .eq("user_id", member.id)
+        .order("id", { ascending: false });
+      if (!reviews?.length) return send(res, 200, { items: [] });
+      const setIds = [...new Set(reviews.map(r => r.set_id))];
+      const { data: sets } = await db
+        .from("learning_sets")
+        .select("id, title, category")
+        .in("id", setIds)
+        .eq("user_id", member.id);
+      const setMap = {};
+      (sets || []).forEach(s => { setMap[s.id] = s; });
+      return send(res, 200, {
+        items: reviews
+          .filter(r => setMap[r.set_id])
+          .map(r => ({
+            set_id: Number(r.set_id),
+            question_id: r.question_id,
+            title: setMap[r.set_id].title,
+            category: setMap[r.set_id].category
+          }))
       });
-      return send(res, 200, { items: result.rows.map((row) => ({
-        set_id: Number(row.set_id), question_id: row.question_id, title: row.title, category: row.category
-      })) });
     }
 
+    // POST /api/reviews (save / unsave a question)
     if (path === "reviews" && method === "POST") {
       const setId = Number(body.set_id);
       const questionId = String(body.question_id || "");
       const row = await getOwnedSet(member.id, setId);
       if (!row) return fail(res, 404, "Set not found.");
       const questions = JSON.parse(row.questions_json || "[]");
-      if (!questions.some((q) => String(q.id) === questionId)) return fail(res, 404, "Question not found.");
+      if (!questions.some(q => String(q.id) === questionId)) return fail(res, 404, "Question not found.");
       if (body.saved) {
-        await db.execute({
-          sql: "INSERT OR IGNORE INTO saved_reviews(user_id,set_id,question_id,created_at) VALUES(?,?,?,?)",
-          args: [member.id, setId, questionId, nowIso()]
-        });
+        await db
+          .from("saved_reviews")
+          .upsert(
+            { user_id: member.id, set_id: setId, question_id: questionId, created_at: nowIso() },
+            { onConflict: "user_id,set_id,question_id", ignoreDuplicates: true }
+          );
       } else {
-        await db.execute({ sql: "DELETE FROM saved_reviews WHERE user_id = ? AND set_id = ? AND question_id = ?", args: [member.id, setId, questionId] });
+        await db
+          .from("saved_reviews")
+          .delete()
+          .eq("user_id", member.id)
+          .eq("set_id", setId)
+          .eq("question_id", questionId);
       }
       return send(res, 200, { ok: true });
     }
 
+    // GET / DELETE /api/sets/:id
     const setMatch = path.match(/^sets\/(\d+)$/);
     if (setMatch) {
       const setId = Number(setMatch[1]);
@@ -508,14 +535,13 @@ async function route(req, res) {
       if (!row) return fail(res, 404, "Set not found.");
       if (method === "GET") return send(res, 200, serializeSet(row, true));
       if (method === "DELETE") {
-        await db.batch([
-          { sql: "DELETE FROM saved_reviews WHERE user_id = ? AND set_id = ?", args: [member.id, setId] },
-          { sql: "DELETE FROM learning_sets WHERE id = ? AND user_id = ?", args: [setId, member.id] }
-        ], "write");
+        await db.from("saved_reviews").delete().eq("user_id", member.id).eq("set_id", setId);
+        await db.from("learning_sets").delete().eq("id", setId).eq("user_id", member.id);
         return send(res, 200, { ok: true });
       }
     }
 
+    // POST /api/sets/:id/attempt
     const attemptMatch = path.match(/^sets\/(\d+)\/attempt$/);
     if (attemptMatch && method === "POST") {
       const setId = Number(attemptMatch[1]);
@@ -523,34 +549,47 @@ async function route(req, res) {
       if (!row) return fail(res, 404, "Set not found.");
       const questions = JSON.parse(row.questions_json || "[]");
       const questionId = String(body.question_id || "");
-      const question = questions.find((q) => String(q.id) === questionId);
+      const question = questions.find(q => String(q.id) === questionId);
       if (!question) return fail(res, 404, "Question not found in this set.");
       const selectedAnswer = String(body.selected_answer || "");
       const correct = selectedAnswer.trim().toLowerCase() === String(question.answer).trim().toLowerCase();
       const attempts = JSON.parse(row.attempts_json || "{}");
       attempts[questionId] = { selected_answer: selectedAnswer, is_correct: correct, answered_at: nowIso() };
-      await db.execute({
-        sql: "UPDATE learning_sets SET attempts_json = ? WHERE id = ? AND user_id = ?",
-        args: [JSON.stringify(attempts), setId, member.id]
+      const { error: updateErr } = await db
+        .from("learning_sets")
+        .update({ attempts_json: JSON.stringify(attempts), updated_at: nowIso() })
+        .eq("id", setId)
+        .eq("user_id", member.id);
+      if (updateErr) throw new Error(updateErr.message);
+      return send(res, 200, {
+        saved: true,
+        completed: Object.keys(attempts).filter(k => !k.startsWith("_")).length,
+        is_correct: correct
       });
-      return send(res, 200, { saved: true, completed: Object.keys(attempts).length, is_correct: correct });
     }
 
+    // POST /api/sets/:id/status
     const statusMatch = path.match(/^sets\/(\d+)\/status$/);
     if (statusMatch && method === "POST") {
       const status = body.status;
-      if (!(["active", "archived"].includes(status))) return fail(res, 400, "Status must be active or archived.");
-      const result = await db.execute({
-        sql: "UPDATE learning_sets SET status = ? WHERE id = ? AND user_id = ?",
-        args: [status, Number(statusMatch[1]), member.id]
-      });
-      if (!result.rowsAffected) return fail(res, 404, "Set not found.");
+      if (!(["active", "archived"].includes(status)))
+        return fail(res, 400, "Status must be active or archived.");
+      const { data: updated, error: statusErr } = await db
+        .from("learning_sets")
+        .update({ status, updated_at: nowIso() })
+        .eq("id", Number(statusMatch[1]))
+        .eq("user_id", member.id)
+        .select("id");
+      if (statusErr) throw new Error(statusErr.message);
+      if (!updated?.length) return fail(res, 404, "Set not found.");
       return send(res, 200, { ok: true });
     }
   }
 
   return fail(res, 404, "API route not found.");
 }
+
+// ─── Exported handler ─────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
   res.setHeader("X-Content-Type-Options", "nosniff");
