@@ -974,10 +974,67 @@ function openImport() {
   populateDifficultyDropdown();
   updatePromptFromInputs();
   $("#importModal").classList.remove("hidden");
+  // Reset the textarea and wire up mobile-safe paste handling
+  const ta = $("#jsonInput");
+  if (ta) {
+    ta.value = "";
+    ta.style.height = "auto";
+    setupMobilePaste(ta);
+  }
+}
+
+/**
+ * Ensures the full clipboard text is captured on mobile.
+ * Mobile browsers (especially iOS Safari & Android Chrome) sometimes
+ * truncate large paste operations when the textarea is small/hidden.
+ * We listen to the paste event and use the Clipboard API as a fallback
+ * to read the complete text, then set it directly on the element.
+ * We also auto-resize the textarea so the user can see what they pasted.
+ */
+function setupMobilePaste(ta) {
+  if (ta._mobilePasteWired) return; // only wire once
+  ta._mobilePasteWired = true;
+
+  // Auto-resize on any input so user sees full content
+  const autoResize = () => {
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, window.innerHeight * 0.45) + "px";
+  };
+  ta.addEventListener("input", autoResize);
+
+  // Intercept paste to guarantee full content on mobile
+  ta.addEventListener("paste", (e) => {
+    // If the Clipboard API is available, use it to get the full text
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      e.preventDefault();
+      navigator.clipboard.readText().then((text) => {
+        // Insert at cursor position (or replace selection)
+        const start = ta.selectionStart ?? 0;
+        const end = ta.selectionEnd ?? 0;
+        const before = ta.value.slice(0, start);
+        const after = ta.value.slice(end);
+        ta.value = before + text + after;
+        ta.selectionStart = ta.selectionEnd = start + text.length;
+        autoResize();
+        // Trigger input event so any listeners fire
+        ta.dispatchEvent(new Event("input", { bubbles: true }));
+      }).catch(() => {
+        // Clipboard API blocked (e.g. user denied permission) — fall through to default paste
+        // The browser will handle it normally, just auto-resize after
+        setTimeout(autoResize, 50);
+      });
+    } else {
+      // No Clipboard API — let browser paste normally, then resize
+      setTimeout(autoResize, 50);
+    }
+  });
 }
 
 function closeImport() {
   $("#importModal").classList.add("hidden");
+  // Reset textarea height so it doesn't stay expanded next open
+  const ta = $("#jsonInput");
+  if (ta) ta.style.height = "";
 }
 
 function populateCategoryDropdown() {
